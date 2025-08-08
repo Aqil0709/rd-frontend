@@ -123,7 +123,7 @@ const CheckoutPage = () => {
     const totalDiscount = originalSubtotal - subtotal;
 
     // --- UPDATED UPI DETAILS ---
-    const YOUR_UPI_VPA = 'kashilingdadakokare9623-1@okicici';
+    const YOUR_UPI_VPA = 'BHARATPE2FOD000R8022209@unitype';
     const YOUR_MERCHANT_NAME = 'RD General Store';
 
     const handleInputChange = (e) => {
