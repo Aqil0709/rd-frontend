@@ -5,7 +5,6 @@ import { Truck, MapPin, CreditCard, ChevronDown, Package, CheckCircle, Loader, W
 const CheckoutPage = () => {
     const { cart, t, currentUser, navigate, placeUpiOrder, addresses, addAddress, showNotification, placeCodOrder, getOrderStatus, cancelOrder, setCart } = useContext(AppContext);
 
-    // --- FIX 1: Changed address_type to addressType ---
     const [newAddressData, setNewAddressData] = useState({
         name: '', mobile: '', pincode: '', locality: '', address: '', city: '', state: '', addressType: 'Home',
     });
@@ -122,7 +121,9 @@ const CheckoutPage = () => {
     const originalSubtotal = cart.reduce((sum, item) => sum + (item.originalPrice ? Number(item.originalPrice) : Number(item.price)) * Number(item.quantity), 0);
     const total = subtotal;
     const totalDiscount = originalSubtotal - subtotal;
-    const YOUR_UPI_VPA = 'BHARATPE2FOD000R8022209@unitype';
+
+    // --- UPDATED UPI DETAILS ---
+    const YOUR_UPI_VPA = 'kashilingdadakokare9623-1@okicici';
     const YOUR_MERCHANT_NAME = 'RD General Store';
 
     const handleInputChange = (e) => {
@@ -203,7 +204,6 @@ const CheckoutPage = () => {
                 setDeliveryAddress(newlyAddedAddress);
                 setSelectedAddressId(newlyAddedAddress.id);
                 setShowAddressForm(false);
-                // --- FIX 2: Changed address_type to addressType ---
                 setNewAddressData({ name: currentUser?.name || '', mobile: '', pincode: '', locality: '', address: '', city: '', state: '', addressType: 'Home' });
                 setActiveStep(2);
             } else {
@@ -220,30 +220,41 @@ const CheckoutPage = () => {
         ? Math.round((totalDiscount / originalSubtotal) * 100)
         : 0;
 
-    const handleUpiPay = async () => {
+    const handleUpiPay = () => {
         if (!deliveryAddress) {
             showNotification(t('pleaseSelectOrAddAddress'), 'error');
             return;
         }
+        
         setIsSubmitting(true);
         const transactionRef = `ORDER_${Date.now()}`;
-
-        try {
-            const orderResponse = await placeUpiOrder(deliveryAddress.id, transactionRef);
-            if (orderResponse?.orderId) {
-                const upiUrl = `upi://pay?pa=${YOUR_UPI_VPA}&pn=${encodeURIComponent(YOUR_MERCHANT_NAME)}&tid=${transactionRef}&tr=${transactionRef}&am=${total.toFixed(2)}&cu=INR`;
-                setUpiPaymentInitiated(true);
-                setUpiOrderId(orderResponse.orderId);
-                setIsPollingPayment(true);
-                window.location.href = upiUrl;
-            } else {
-                throw new Error(orderResponse?.message || t('failedToInitiateOrder'));
+    
+        // Construct the UPI URL and redirect the user immediately.
+        const upiUrl = `upi://pay?pa=${YOUR_UPI_VPA}&pn=${encodeURIComponent(YOUR_MERCHANT_NAME)}&tid=${transactionRef}&tr=${transactionRef}&am=${total.toFixed(2)}&cu=INR`;
+        window.location.href = upiUrl;
+    
+        // Define an async function to handle the backend call in the background.
+        const createOrderInBackground = async () => {
+            try {
+                const orderResponse = await placeUpiOrder(deliveryAddress.id, transactionRef);
+                if (orderResponse?.orderId) {
+                    // Set state to start polling when the user returns to the app.
+                    setUpiPaymentInitiated(true);
+                    setUpiOrderId(orderResponse.orderId);
+                    setIsPollingPayment(true);
+                } else {
+                    console.error("Failed to create order after redirecting to UPI:", orderResponse?.message);
+                }
+            } catch (error) {
+                console.error("Error creating order in background after UPI redirect:", error);
+            } finally {
+                // This will likely not be seen by the user immediately, but it's good practice.
+                setIsSubmitting(false);
             }
-        } catch (error) {
-            showNotification(error.message || t('failedToInitiateOrder'), 'error');
-        } finally {
-            setIsSubmitting(false);
-        }
+        };
+    
+        // Execute the order creation in the background.
+        createOrderInBackground();
     };
 
     if (cart.length === 0 && !upiPaymentInitiated) {
@@ -262,7 +273,6 @@ const CheckoutPage = () => {
             <p>{address.address}, {address.locality}</p>
             <p>{address.city}, {address.state} - {address.pincode}</p>
             <p className="font-semibold">{t('mobile')}: {address.mobile}</p>
-            {/* --- FIX 3: Changed address.address_type to address.addressType --- */}
             {address.addressType && (
                 <span className="mt-2 inline-block bg-blue-100 text-blue-800 text-xs font-semibold px-2.5 py-0.5 rounded-full">
                     {address.addressType}
@@ -345,7 +355,6 @@ const CheckoutPage = () => {
                                                 </div>
                                             </div>
                                             <div className="flex items-center space-x-4 mt-2">
-                                                {/* --- FIX 4: Changed name="address_type" to name="addressType" --- */}
                                                 <label className="inline-flex items-center cursor-pointer">
                                                     <input type="radio" name="addressType" value="Home" checked={newAddressData.addressType === 'Home'} onChange={handleInputChange} className="form-radio h-4 w-4 text-blue-600" />
                                                     <span className="ml-2 text-gray-700">{t('Home')}</span>
@@ -390,7 +399,7 @@ const CheckoutPage = () => {
                             )}
                         </div>
 
-                        {/* Step 2: Order Summary */}
+                        {/* Order Summary and Payment Steps... */}
                         <div className="bg-white rounded-lg shadow-md border border-gray-200">
                             <button
                                 className="w-full text-left p-5 flex justify-between items-center font-bold text-xl text-gray-800"
