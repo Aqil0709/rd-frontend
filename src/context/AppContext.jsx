@@ -10,7 +10,7 @@ export const AppProvider = ({ children }) => {
 
     // --- API URLS ---
     const API_BASE_URL = `https://rd-backend-0e7p.onrender.com`; // Your backend URL
-    const AUTH_API_BASE_URL = 'https://rd-backend-0e7p.onrender.com/auth'; // Authentication-specific base URL
+    const AUTH_API_BASE_URL = 'http://localhost:5002/auth'; // Authentication-specific base URL
 
     // --- State Variables ---
     const [products, setProducts] = useState([]);
@@ -60,30 +60,69 @@ export const AppProvider = ({ children }) => {
         return () => clearTimeout(timer);
     }, []);
 
-    // --- Order Status for Payment Polling ---
-    const getOrderStatus = useCallback(async (orderId) => {
+    // --- NEW: Create Razorpay Order ---
+    const createRazorpayOrder = useCallback(async (deliveryAddressId, totalAmount) => {
+        if (!currentUser) {
+            showNotification(t('pleaseLoginToPlaceOrder'), 'error');
+            throw new Error("User not logged in.");
+        }
         const token = localStorage.getItem('shopkartToken');
-        if (!currentUser || !token) {
-            console.error("User not logged in or token missing for polling.");
-            throw new Error("Authentication required.");
-        }
         try {
-            const response = await fetch(`${API_BASE_URL}/orders/${orderId}/status`, {
+            // This endpoint should first create an order in your DB, then create the Razorpay order
+            const response = await fetch(`${API_BASE_URL}/payment/create-order`, {
+                method: 'POST',
                 headers: {
+                    'Content-Type': 'application/json',
                     'Authorization': `Bearer ${token}`
-                }
+                },
+                body: JSON.stringify({
+                    amount: totalAmount,
+                    receipt: `receipt_order_${new Date().getTime()}`, // A unique ID for the order
+                    deliveryAddressId: deliveryAddressId,
+                    cart: cart.map(item => ({
+                        productId: item.id,
+                        quantity: item.quantity,
+                        price: item.price,
+                        originalPrice: item.originalPrice || item.price
+                    }))
+                }),
             });
-
+            const data = await response.json();
             if (!response.ok) {
-                const errorData = await response.json().catch(() => ({ message: 'Failed to get order status' }));
-                throw new Error(errorData.message);
+                throw new Error(data.message || 'Failed to create Razorpay order');
             }
-            return await response.json();
-        } catch (err) {
-            console.error("Error fetching order status:", err);
-            throw err;
+            return data;
+        } catch (error) {
+            console.error("Error creating Razorpay order:", error);
+            showNotification(error.message || 'Failed to create payment order', 'error');
+            throw error;
         }
-    }, [currentUser, API_BASE_URL]);
+    }, [currentUser, cart, showNotification, t, API_BASE_URL]);
+
+    // --- NEW: Verify Razorpay Payment ---
+    const verifyRazorpayPayment = useCallback(async (verificationData) => {
+        const token = localStorage.getItem('shopkartToken');
+        try {
+            const response = await fetch(`${API_BASE_URL}/payment/verify-payment`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify(verificationData),
+            });
+            const data = await response.json();
+            if (!response.ok) {
+                throw new Error(data.message || 'Payment verification failed');
+            }
+            return data;
+        } catch (error) {
+            console.error("Error verifying Razorpay payment:", error);
+            showNotification(error.message || 'Payment verification failed', 'error');
+            throw error;
+        }
+    }, [showNotification, API_BASE_URL]);
+
 
     // --- Fetch a single order by ID ---
     const fetchOrderById = useCallback(async (orderId) => {
@@ -117,116 +156,6 @@ export const AppProvider = ({ children }) => {
         }
     }, [currentUser, showNotification, t, API_BASE_URL]);
 
-    // --- Place COD Order ---
-    const placeCodOrder = async (deliveryAddressId) => {
-        try {
-            if (!currentUser || !currentUser.id) {
-                showNotification(t('pleaseLogInToPlaceOrder'), 'error');
-                return;
-            }
-            const token = localStorage.getItem('shopkartToken');
-            if (!token) {
-                showNotification(t('authenticationRequired'), 'error');
-                navigate('login');
-                return;
-            }
-
-            const response = await fetch(`${API_BASE_URL}/orders/user/${currentUser.id}/orders/cod`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                },
-                body: JSON.stringify({
-                    deliveryAddressId,
-                    cart: cart.map(item => ({
-                        productId: item.id,
-                        quantity: item.quantity,
-                        price: item.price,
-                        originalPrice: item.originalPrice || item.price
-                    }))
-                })
-            });
-
-            const data = await response.json();
-            if (!response.ok) {
-                throw new Error(data.message || t('failedToPlaceOrder'));
-            }
-
-            showNotification(t('orderPlacedSuccessfully'), 'success');
-            setCart([]);
-            navigate('orderConfirmation', data);
-            return data;
-
-        } catch (error) {
-            console.error('Error in AppContext placeCodOrder:', error);
-            showNotification(error.message || t('failedToPlaceOrder'), 'error');
-            throw error;
-        }
-    };
-
-    // --- Place UPI Order ---
-    const placeUpiOrder = useCallback(async (deliveryAddressId, transactionRef) => {
-        if (!currentUser) {
-            showNotification(t('pleaseLoginToPlaceOrder'), 'error');
-            navigate('login');
-            throw new Error("User not logged in.");
-        }
-        const token = localStorage.getItem('shopkartToken');
-
-        try {
-            const response = await fetch(`${API_BASE_URL}/orders/upi-initiate/${currentUser.id}`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                },
-                body: JSON.stringify({
-                    deliveryAddressId,
-                    transactionRef,
-                    cart: cart.map(item => ({
-                        productId: item.id,
-                        quantity: item.quantity,
-                        price: item.price,
-                        originalPrice: item.originalPrice || item.price
-                    }))
-                })
-            });
-
-            const data = await response.json();
-            if (!response.ok) {
-                throw new Error(data.message || 'Failed to initiate order');
-            }
-            return data;
-        } catch (error) {
-            console.error("Error in placeUpiOrder:", error);
-            showNotification(error.message || 'Failed to initiate order', 'error');
-            throw error;
-        }
-    }, [currentUser, navigate, showNotification, t, API_BASE_URL, cart]);
-
-    // --- Cancel Order ---
-    const cancelOrder = useCallback(async (orderId) => {
-        if (!currentUser) {
-            showNotification(t('pleaseLoginToCancel'), 'error');
-            throw new Error("User not logged in.");
-        }
-        const token = localStorage.getItem('shopkartToken');
-
-        const response = await fetch(`${API_BASE_URL}/orders/${orderId}/cancel`, {
-            method: 'PUT',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-            },
-        });
-
-        const data = await response.json();
-        if (!response.ok) {
-            throw new Error(data.message || t('failedToCancelOrder'));
-        }
-        return data;
-    }, [currentUser, showNotification, t, API_BASE_URL]);
 
     // --- Fetch Products ---
     const fetchProducts = useCallback(async () => {
@@ -609,32 +538,32 @@ export const AppProvider = ({ children }) => {
     };
 
    const login = async (userData) => {
-        setAuthLoading(true);
-        setAuthError(null);
-        try {
-            const response = await fetch(`${AUTH_API_BASE_URL}/login`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(userData),
+        setAuthLoading(true);
+        setAuthError(null);
+        try {
+            const response = await fetch(`${AUTH_API_BASE_URL}/login`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(userData),
                 credentials: 'include' // <-- ADD THIS LINE
-            });
-            const data = await response.json();
-            if (!response.ok) {
-                setAuthError(data.message || t('loginFailed'));
-                return;
-            }
-            const user = { id: data.id, name: data.name, mobileNumber: data.mobileNumber, role: data.role };
-            setCurrentUser(user);
-            localStorage.setItem('shopkartUser', JSON.stringify(user));
-            localStorage.setItem('shopkartToken', data.token);
-            navigate('home');
-        } catch (error) {
-            console.error('Login failed:', error);
-            setAuthError(t('unexpectedLoginError'));
-        } finally {
-            setAuthLoading(false);
-        }
-    };
+            });
+            const data = await response.json();
+            if (!response.ok) {
+                setAuthError(data.message || t('loginFailed'));
+                return;
+            }
+            const user = { id: data.id, name: data.name, mobileNumber: data.mobileNumber, role: data.role };
+            setCurrentUser(user);
+            localStorage.setItem('shopkartUser', JSON.stringify(user));
+            localStorage.setItem('shopkartToken', data.token);
+            navigate('home');
+        } catch (error) {
+            console.error('Login failed:', error);
+            setAuthError(t('unexpectedLoginError'));
+        } finally {
+            setAuthLoading(false);
+        }
+    };
 
     const logout = () => {
         setCurrentUser(null);
@@ -800,11 +729,6 @@ export const AppProvider = ({ children }) => {
             showNotification(t('failedToRemoveFromCartNetwork'), 'error');
         }
     };
-
-    const placeOrder = useCallback(() => {
-        showNotification(t('orderPlacedSuccess'), 'success');
-        setCart([]);
-    }, [showNotification, t]);
 
     // --- User Profile and Address Management ---
     const updateUserProfile = useCallback(async (updatedFields) => {
@@ -983,7 +907,7 @@ const addAddress = useCallback(async (addressData) => {
         orders, isLoadingOrders, errorOrders,
         stock, isLoadingStock, errorStock,
         notification,
-        setLanguage, navigate, login, addProduct, register, logout, addToCart, updateQuantity, removeFromCart, placeOrder, updateUserProfile, addAddress, setSearchTerm,
+        setLanguage, navigate, login, addProduct, register, logout, addToCart, updateQuantity, removeFromCart, updateUserProfile, addAddress, setSearchTerm,
         deleteProduct,
         updateProduct,
         fetchProducts,
@@ -992,18 +916,18 @@ const addAddress = useCallback(async (addressData) => {
         fetchMyOrders,
         fetchStock,
         updateStock,
-        placeUpiOrder,
         showNotification,
         addStockItem,
-        placeCodOrder,
         fetchOrderById,
-        cancelOrder,
         updateOrderStatus,
         generateNewProductWithInitialStock,
         sendOtp,
         verifyOtp,
-        sendPasswordResetOtp, // Added for forgot password
-        resetPassword,        // Added for forgot password
+        sendPasswordResetOtp,
+        resetPassword,
+        // NEW Razorpay Functions
+        createRazorpayOrder,
+        verifyRazorpayPayment,
     };
 
     return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
