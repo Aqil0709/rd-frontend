@@ -142,7 +142,7 @@ const CheckoutPage = () => {
     const handleSubmitPayment = async () => {
         if (!deliveryAddress || !deliveryAddress.id) { // Check for address and its ID
             showNotification(t('pleaseSelectOrAddAddress'), 'error');
-            setActiveStep(1);
+            // setActiveStep(1); // THIS LINE WAS THE PROBLEM
             return;
         }
         setIsSubmitting(true);
