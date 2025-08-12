@@ -5,13 +5,12 @@ import { locales } from '../translations/locales'; // Ensure this path is correc
 export const AppContext = createContext();
 
 export const AppProvider = ({ children }) => {
-    // IMPORTANT: Access __app_id here provided by the Canvas environment
     const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
 
-    // --- API URLS ---
-    const API_BASE_URL = `https://rd-backend-0e7p.onrender.com`; // Your backend URL
-    const AUTH_API_BASE_URL = 'https://rd-backend-0e7p.onrender.com/auth'; // Authentication-specific base URL
-
+    // --- DYNAMIC API URLS ---
+    const API_BASE_URL = process.env.NODE_ENV === 'production'
+        ? 'https://rd-backend-0e7p.onrender.com'
+        : 'http://localhost:5002';
 
     // --- State Variables ---
     const [products, setProducts] = useState([]);
@@ -61,7 +60,7 @@ export const AppProvider = ({ children }) => {
         return () => clearTimeout(timer);
     }, []);
 
-    // --- NEW: Create Razorpay Order ---
+    // --- Razorpay Order Functions ---
     const createRazorpayOrder = useCallback(async (deliveryAddressId, totalAmount) => {
         if (!currentUser) {
             showNotification(t('pleaseLoginToPlaceOrder'), 'error');
@@ -69,7 +68,6 @@ export const AppProvider = ({ children }) => {
         }
         const token = localStorage.getItem('shopkartToken');
         try {
-            // This endpoint should first create an order in your DB, then create the Razorpay order
             const response = await fetch(`${API_BASE_URL}/payment/create-order`, {
                 method: 'POST',
                 headers: {
@@ -78,13 +76,14 @@ export const AppProvider = ({ children }) => {
                 },
                 body: JSON.stringify({
                     amount: totalAmount,
-                    receipt: `receipt_order_${new Date().getTime()}`, // A unique ID for the order
-                    deliveryAddressId: deliveryAddressId,
+                    receipt: `receipt_order_${new Date().getTime()}`,
+                    deliveryAddressId: deliveryAddressId, // THIS LINE IS CRUCIAL
                     cart: cart.map(item => ({
                         productId: item.id,
                         quantity: item.quantity,
                         price: item.price,
-                        originalPrice: item.originalPrice || item.price
+                        originalPrice: item.originalPrice || item.price,
+                        images: item.images
                     }))
                 }),
             });
@@ -100,7 +99,6 @@ export const AppProvider = ({ children }) => {
         }
     }, [currentUser, cart, showNotification, t, API_BASE_URL]);
 
-    // --- NEW: Verify Razorpay Payment ---
     const verifyRazorpayPayment = useCallback(async (verificationData) => {
         const token = localStorage.getItem('shopkartToken');
         try {
@@ -123,7 +121,6 @@ export const AppProvider = ({ children }) => {
             throw error;
         }
     }, [showNotification, API_BASE_URL]);
-
 
     // --- Fetch a single order by ID ---
     const fetchOrderById = useCallback(async (orderId) => {
@@ -156,7 +153,6 @@ export const AppProvider = ({ children }) => {
             setIsLoadingOrders(false);
         }
     }, [currentUser, showNotification, t, API_BASE_URL]);
-
 
     // --- Fetch Products ---
     const fetchProducts = useCallback(async () => {
@@ -514,9 +510,9 @@ export const AppProvider = ({ children }) => {
     // --- Authentication Functions ---
     const register = async (userData) => {
         setAuthLoading(true);
-        setAuthError(null); // Clear previous error
+        setAuthError(null);
         try {
-            const response = await fetch(`${AUTH_API_BASE_URL}/register`, {
+            const response = await fetch(`${API_BASE_URL}/auth/register`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(userData),
@@ -526,7 +522,6 @@ export const AppProvider = ({ children }) => {
                 setAuthError(data.message || t('registrationFailed'));
                 return { success: false, message: data.message || t('registrationFailed') };
             }
-            // Upon successful registration, automatically log in the user
             await login({ mobileNumber: userData.mobileNumber, password: userData.password });
             return { success: true, message: t('registrationSuccessful') };
         } catch (error) {
@@ -538,15 +533,15 @@ export const AppProvider = ({ children }) => {
         }
     };
 
-   const login = async (userData) => {
+    const login = async (userData) => {
         setAuthLoading(true);
         setAuthError(null);
         try {
-            const response = await fetch(`${AUTH_API_BASE_URL}/login`, {
+            const response = await fetch(`${API_BASE_URL}/auth/login`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(userData),
-                credentials: 'include' // <-- ADD THIS LINE
+                credentials: 'include'
             });
             const data = await response.json();
             if (!response.ok) {
@@ -578,64 +573,56 @@ export const AppProvider = ({ children }) => {
     };
 
     // --- 2Factor OTP & Password Reset Functions ---
-
     const sendOtp = async (mobileNumber) => {
         try {
-            const response = await fetch(`${AUTH_API_BASE_URL}/send-otp`, {
+            const response = await fetch(`${API_BASE_URL}/auth/send-otp`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ mobileNumber }),
             });
-            const data = await response.json();
-            return data;
+            return await response.json();
         } catch (error) {
-            console.error("Error sending OTP via backend:", error);
+            console.error("Error sending OTP:", error);
             return { success: false, message: t('failedToSendOtpNetwork') };
         }
     };
 
     const verifyOtp = async (mobileNumber, otp, sessionId) => {
         try {
-            const response = await fetch(`${AUTH_API_BASE_URL}/verify-otp`, {
+            const response = await fetch(`${API_BASE_URL}/auth/verify-otp`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ mobileNumber, otp, sessionId }),
             });
-            const data = await response.json();
-            return data;
+            return await response.json();
         } catch (error) {
-            console.error("Error verifying OTP via backend:", error);
+            console.error("Error verifying OTP:", error);
             return { success: false, message: t('otpVerificationFailedNetwork') };
         }
     };
 
-    // NEW: Function to send OTP for password reset
     const sendPasswordResetOtp = async (mobileNumber) => {
         try {
-            // This endpoint should be specifically for password resets
-            const response = await fetch(`${AUTH_API_BASE_URL}/send-reset-otp`, {
+            const response = await fetch(`${API_BASE_URL}/auth/send-reset-otp`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ mobileNumber }),
             });
-            const data = await response.json();
-            return data; // Expects { success: true, sessionId: '...' } or { success: false, message: '...' }
+            return await response.json();
         } catch (error) {
             console.error("Error sending password reset OTP:", error);
             return { success: false, message: t('failedToSendOtpNetwork') };
         }
     };
 
-    // NEW: Function to reset the password after OTP verification
     const resetPassword = async ({ mobileNumber, password, otpSessionId }) => {
         try {
-            const response = await fetch(`${AUTH_API_BASE_URL}/reset-password`, {
+            const response = await fetch(`${API_BASE_URL}/auth/reset-password`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ mobileNumber, newPassword: password, sessionId: otpSessionId }),
             });
-            const data = await response.json();
-            return data; // Expects { success: true } or { success: false, message: '...' }
+            return await response.json();
         } catch (error) {
             console.error("Error resetting password:", error);
             return { success: false, message: t('passwordResetFailedNetwork') };
@@ -768,7 +755,7 @@ export const AppProvider = ({ children }) => {
         }
     }, [currentUser, showNotification, t, API_BASE_URL]);
 
-const addAddress = useCallback(async (addressData) => {
+    const addAddress = useCallback(async (addressData) => {
         if (!currentUser) {
             showNotification(t('pleaseLoginToAddAddress'), 'error');
             throw new Error("User not logged in.");
@@ -787,25 +774,17 @@ const addAddress = useCallback(async (addressData) => {
             const data = await response.json();
 
             if (!response.ok) {
-                // If the server returns an error, throw it
                 throw new Error(data.message || t('failedToAddAddress'));
             }
             
-            const newAddress = data.address; // Extract the new address from the response
-
-            // THIS IS THE FIX:
-            // Update the global addresses state by adding the new one to the list.
+            const newAddress = data.address;
             setAddresses(prevAddresses => [...prevAddresses, newAddress]);
-            
             showNotification(data.message || t('addressAddedSuccessfully'), 'success');
-            
-            // Return the newly created address object so the CheckoutPage can use it
             return newAddress;
 
         } catch (error) {
             console.error('Failed to add address:', error);
             showNotification(error.message || t('failedToAddAddressNetwork'), 'error');
-            // Re-throw the error so the component knows the submission failed
             throw error;
         }
     }, [currentUser, showNotification, t, API_BASE_URL]);
@@ -926,10 +905,8 @@ const addAddress = useCallback(async (addressData) => {
         verifyOtp,
         sendPasswordResetOtp,
         resetPassword,
-        // NEW Razorpay Functions
         createRazorpayOrder,
         verifyRazorpayPayment,
     };
 
     return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
-};
