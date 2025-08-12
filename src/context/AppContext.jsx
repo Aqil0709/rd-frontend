@@ -9,8 +9,8 @@ export const AppProvider = ({ children }) => {
     const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
 
     // --- API URLS ---
-    const API_BASE_URL = `https://rd-backend-0e7p.onrender.com/`; // Your backend URL
-    const AUTH_API_BASE_URL = 'https://rd-genral-store.netlify.app/auth'; // Authentication-specific base URL
+    const API_BASE_URL = `https://rd-backend-0e7p.onrender.com`; // Your backend URL
+    const AUTH_API_BASE_URL = 'https://rd-backend-0e7p.onrender.com/auth'; // Authentication-specific base URL
 
 
     // --- State Variables ---
