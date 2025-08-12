@@ -154,7 +154,7 @@ const CheckoutPage = () => {
         try {
             // 1. Create a Razorpay order on your server
             const orderData = await createRazorpayOrder(deliveryAddress.id, total);
-            if (!orderData || !orderData.id || !orderData.amount) {
+            if (!orderData || !orderData.order_id || !orderData.amount) {
                 throw new Error(t('failedToCreateRazorpayOrder'));
             }
 
@@ -165,7 +165,7 @@ const CheckoutPage = () => {
                 currency: "INR",
                 name: "RD General Store",
                 description: `Order #${orderData.receipt}`,
-                order_id: orderData.id,
+                order_id: orderData.order_id,
                 handler: async function (response) {
                     // 3. Handle successful payment by verifying it on the backend
                     try {
