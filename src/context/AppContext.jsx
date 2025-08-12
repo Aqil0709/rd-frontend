@@ -1,4 +1,6 @@
 /* global __app_id */
+// --- THIS IS THE COMPLETE AppContext.jsx FILE ---
+
 import React, { useState, createContext, useEffect, useCallback } from 'react';
 import { locales } from '../translations/locales'; // Ensure this path is correct
 
@@ -8,6 +10,7 @@ export const AppProvider = ({ children }) => {
     const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
 
     // --- DYNAMIC API URLS ---
+    // This will use your live Render URL in production and localhost for development
     const API_BASE_URL = process.env.NODE_ENV === 'production'
         ? 'https://rd-backend-0e7p.onrender.com'
         : 'http://localhost:5002';
