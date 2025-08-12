@@ -140,7 +140,7 @@ const CheckoutPage = () => {
 
     // --- Razorpay Payment Handler ---
     const handleSubmitPayment = async () => {
-        if (!deliveryAddress) {
+        if (!deliveryAddress || !deliveryAddress.id) { // Check for address and its ID
             showNotification(t('pleaseSelectOrAddAddress'), 'error');
             setActiveStep(1);
             return;
@@ -148,6 +148,7 @@ const CheckoutPage = () => {
         setIsSubmitting(true);
 
         try {
+            // Pass the deliveryAddress.id to the context function
             const orderData = await createRazorpayOrder(deliveryAddress.id, total);
             if (!orderData || !orderData.order_id || !orderData.amount) {
                 throw new Error(t('failedToCreateRazorpayOrder'));
@@ -241,6 +242,7 @@ const CheckoutPage = () => {
                 <h1 className="text-3xl font-bold text-gray-800 mb-8 text-center">{t('Checkout')}</h1>
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                     <div className="lg:col-span-2 space-y-4">
+                        {/* Step 1: Delivery Address */}
                         <div className="bg-white rounded-lg shadow-md border border-gray-200">
                             <button className="w-full text-left p-5 flex justify-between items-center font-bold text-xl text-gray-800" onClick={() => setActiveStep(1)}>
                                 <span className="flex items-center">
@@ -320,6 +322,7 @@ const CheckoutPage = () => {
                                 </div>
                             )}
                         </div>
+                        {/* Step 2: Order Summary */}
                         <div className="bg-white rounded-lg shadow-md border border-gray-200">
                             <button className="w-full text-left p-5 flex justify-between items-center font-bold text-xl text-gray-800" onClick={() => deliveryAddress && setActiveStep(2)} disabled={!deliveryAddress}>
                                 <span className="flex items-center">
@@ -362,6 +365,7 @@ const CheckoutPage = () => {
                                 </div>
                             )}
                         </div>
+                        {/* Step 3: Payment */}
                         <div className="bg-white rounded-lg shadow-md border border-gray-200">
                             <button className="w-full text-left p-5 flex justify-between items-center font-bold text-xl text-gray-800" onClick={() => deliveryAddress && setActiveStep(3)} disabled={!deliveryAddress}>
                                 <span className="flex items-center">
@@ -391,6 +395,7 @@ const CheckoutPage = () => {
                             )}
                         </div>
                     </div>
+                    {/* Right Column: Price Details */}
                     <div className="lg:col-span-1 bg-white p-6 rounded-lg shadow-md h-fit sticky top-24 border border-gray-200">
                         <h3 className="text-xl font-bold text-gray-800 border-b pb-4 mb-4">{t('price Details')}</h3>
                         <div className="space-y-3 mb-4 text-gray-700">
