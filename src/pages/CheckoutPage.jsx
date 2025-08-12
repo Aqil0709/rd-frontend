@@ -14,6 +14,7 @@ const useRazorpayScript = () => {
     document.body.appendChild(script);
 
     return () => {
+      // Clean up the script when the component unmounts
       if (document.body.contains(script)) {
         document.body.removeChild(script);
       }
@@ -22,8 +23,10 @@ const useRazorpayScript = () => {
 };
 
 const CheckoutPage = () => {
+    // Load the Razorpay script when the component mounts
     useRazorpayScript();
 
+    // Destructure functions from context
     const { 
         cart, t, currentUser, navigate, 
         addresses, addAddress, showNotification, 
@@ -32,10 +35,12 @@ const CheckoutPage = () => {
         verifyRazorpayPayment
     } = useContext(AppContext);
 
+    // State for managing the new address form
     const [newAddressData, setNewAddressData] = useState({
         name: '', mobile: '', pincode: '', locality: '', address: '', city: '', state: '', addressType: 'Home',
     });
 
+    // State for managing the checkout flow
     const [selectedAddressId, setSelectedAddressId] = useState(null);
     const [showAddressForm, setShowAddressForm] = useState(false);
     const [activeStep, setActiveStep] = useState(1);
@@ -43,6 +48,7 @@ const CheckoutPage = () => {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [addressFormErrors, setAddressFormErrors] = useState({});
 
+    // Effect to set default address or show the form if no addresses exist
     useEffect(() => {
         if (addresses && addresses.length > 0 && !deliveryAddress) {
             const defaultAddress = addresses[0];
@@ -58,17 +64,20 @@ const CheckoutPage = () => {
         }
     }, [addresses, deliveryAddress, cart.length]);
 
+    // Effect to pre-fill user's name in the address form
     useEffect(() => {
         if (currentUser) {
             setNewAddressData(prev => ({ ...prev, name: currentUser.name || '', email: currentUser.email || '' }));
         }
     }, [currentUser]);
 
+    // --- Price Calculations ---
     const subtotal = cart.reduce((sum, item) => sum + Number(item.price) * Number(item.quantity), 0);
     const originalSubtotal = cart.reduce((sum, item) => sum + (item.originalPrice ? Number(item.originalPrice) : Number(item.price)) * Number(item.quantity), 0);
     const total = subtotal;
     const totalDiscount = originalSubtotal - subtotal;
 
+    // --- Address Form Handlers ---
     const handleInputChange = (e) => {
         setNewAddressData(prev => ({ ...prev, [e.target.name]: e.target.value }));
         setAddressFormErrors(prev => ({ ...prev, [e.target.name]: '' }));
@@ -129,6 +138,7 @@ const CheckoutPage = () => {
         }
     };
 
+    // --- Razorpay Payment Handler ---
     const handleSubmitPayment = async () => {
         if (!deliveryAddress) {
             showNotification(t('pleaseSelectOrAddAddress'), 'error');
@@ -241,7 +251,72 @@ const CheckoutPage = () => {
                             </button>
                             {activeStep === 1 && (
                                 <div className="p-5 border-t border-gray-200">
-                                    {/* Address selection and form rendering logic */}
+                                    {addresses && addresses.length > 0 && (
+                                        <div className="mb-4">
+                                            <h3 className="text-lg font-semibold text-gray-700 mb-2">{t('Select an Address')}</h3>
+                                            <select
+                                                value={selectedAddressId || ''}
+                                                onChange={handleAddressSelection}
+                                                className="w-full p-3 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                                            >
+                                                <option value="" disabled>{t('chooseAnAddress')}</option>
+                                                {addresses.map(addr => (
+                                                    <option key={addr.id} value={addr.id}>{addr.name}, {addr.address}, {addr.city}</option>
+                                                ))}
+                                                <option value="new">{t('addNewAddress')}</option>
+                                            </select>
+                                        </div>
+                                    )}
+
+                                    {showAddressForm && (
+                                        <form onSubmit={handleAddAddressSubmit} className="space-y-4 mt-4 p-4 border border-dashed border-gray-300 rounded-lg bg-gray-50">
+                                            <h3 className="text-lg font-bold text-gray-800 mb-2">{t('Add New Address')}</h3>
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                <div>
+                                                    <input type="text" name="name" placeholder={t('fullName')} value={newAddressData.name} onChange={handleInputChange} className={`p-3 border ${addressFormErrors.name ? 'border-red-500' : 'border-gray-300'} rounded-md w-full`} required />
+                                                    {addressFormErrors.name && <p className="text-red-500 text-sm mt-1">{addressFormErrors.name}</p>}
+                                                </div>
+                                                <div>
+                                                    <input type="tel" name="mobile" placeholder={t('mobileNumber')} value={newAddressData.mobile} onChange={handleInputChange} className={`p-3 border ${addressFormErrors.mobile ? 'border-red-500' : 'border-gray-300'} rounded-md w-full`} required />
+                                                    {addressFormErrors.mobile && <p className="text-red-500 text-sm mt-1">{addressFormErrors.mobile}</p>}
+                                                </div>
+                                                <div>
+                                                    <input type="text" name="pincode" placeholder={t('pincode')} value={newAddressData.pincode} onChange={handleInputChange} className={`p-3 border ${addressFormErrors.pincode ? 'border-red-500' : 'border-gray-300'} rounded-md w-full`} required />
+                                                    {addressFormErrors.pincode && <p className="text-red-500 text-sm mt-1">{addressFormErrors.pincode}</p>}
+                                                </div>
+                                                <div>
+                                                    <input type="text" name="locality" placeholder={t('locality')} value={newAddressData.locality} onChange={handleInputChange} className={`p-3 border ${addressFormErrors.locality ? 'border-red-500' : 'border-gray-300'} rounded-md w-full`} required />
+                                                    {addressFormErrors.locality && <p className="text-red-500 text-sm mt-1">{addressFormErrors.locality}</p>}
+                                                </div>
+                                            </div>
+                                            <textarea name="address" placeholder={t('addressArea')} value={newAddressData.address} onChange={handleInputChange} className={`w-full p-3 border ${addressFormErrors.address ? 'border-red-500' : 'border-gray-300'} rounded-md`} rows="3" required></textarea>
+                                            {addressFormErrors.address && <p className="text-red-500 text-sm mt-1">{addressFormErrors.address}</p>}
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                <div>
+                                                    <input type="text" name="city" placeholder={t('city')} value={newAddressData.city} onChange={handleInputChange} className={`p-3 border ${addressFormErrors.city ? 'border-red-500' : 'border-gray-300'} rounded-md w-full`} required />
+                                                    {addressFormErrors.city && <p className="text-red-500 text-sm mt-1">{addressFormErrors.city}</p>}
+                                                </div>
+                                                <div>
+                                                    <input type="text" name="state" placeholder={t('state')} value={newAddressData.state} onChange={handleInputChange} className={`p-3 border ${addressFormErrors.state ? 'border-red-500' : 'border-gray-300'} rounded-md w-full`} required />
+                                                    {addressFormErrors.state && <p className="text-red-500 text-sm mt-1">{addressFormErrors.state}</p>}
+                                                </div>
+                                            </div>
+                                            <div className="flex items-center space-x-4 mt-2">
+                                                <label className="inline-flex items-center cursor-pointer">
+                                                    <input type="radio" name="addressType" value="Home" checked={newAddressData.addressType === 'Home'} onChange={handleInputChange} className="form-radio h-4 w-4 text-blue-600" />
+                                                    <span className="ml-2 text-gray-700">{t('Home')}</span>
+                                                </label>
+                                                <label className="inline-flex items-center cursor-pointer">
+                                                    <input type="radio" name="addressType" value="Work" checked={newAddressData.addressType === 'Work'} onChange={handleInputChange} className="form-radio h-4 w-4 text-blue-600" />
+                                                    <span className="ml-2 text-gray-700">{t('Work')}</span>
+                                                </label>
+                                            </div>
+                                            <button type="submit" disabled={isSubmitting} className="w-full bg-green-600 text-white font-bold py-3 rounded-md hover:bg-green-700 transition-colors disabled:opacity-50 flex items-center justify-center">
+                                                {isSubmitting ? <Loader className="animate-spin h-5 w-5 mr-2" /> : <CheckCircle className="h-5 w-5 mr-2" />}
+                                                {isSubmitting ? t('saving') : t('Save Address')}
+                                            </button>
+                                        </form>
+                                    )}
                                 </div>
                             )}
                         </div>
@@ -255,7 +330,35 @@ const CheckoutPage = () => {
                             </button>
                             {activeStep === 2 && (
                                 <div className="p-5 border-t border-gray-200">
-                                    {/* Cart items rendering logic */}
+                                    <div className="space-y-4 max-h-60 overflow-y-auto custom-scrollbar pr-2">
+                                        {cart.map(item => {
+                                            const itemOriginalPrice = item.originalPrice ? Number(item.originalPrice) : Number(item.price);
+                                            const itemCurrentPrice = Number(item.price);
+                                            const itemTotal = itemCurrentPrice * item.quantity;
+                                            return (
+                                                <div key={item.id} className="flex items-center justify-between border-b border-gray-100 pb-3 last:border-b-0">
+                                                    <div className="flex items-center">
+                                                        <img src={item.images?.[0]} alt={item.name} className="w-16 h-16 object-contain rounded-md mr-4 border border-gray-200" />
+                                                        <div>
+                                                            <p className="font-semibold text-gray-800">{item.name}</p>
+                                                            <p className="text-sm text-gray-600">Qty: {item.quantity}</p>
+                                                            <div className="flex items-center mt-1">
+                                                                <p className="font-bold text-gray-900 text-base">₹{itemTotal.toFixed(2)}</p>
+                                                                {itemOriginalPrice > itemCurrentPrice && (
+                                                                    <>
+                                                                        <span className="text-sm text-gray-500 line-through ml-2">₹{(itemOriginalPrice * item.quantity).toFixed(2)}</span>
+                                                                    </>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                    <button onClick={() => setActiveStep(3)} className="w-full mt-6 py-3 bg-blue-600 text-white text-lg font-semibold rounded-md hover:bg-blue-700" disabled={cart.length === 0}>
+                                        {t('Continue To Payment')}
+                                    </button>
                                 </div>
                             )}
                         </div>
