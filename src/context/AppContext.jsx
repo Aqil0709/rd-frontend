@@ -9,7 +9,7 @@ export const AppProvider = ({ children }) => {
     const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
 
     // --- API URLS ---
-    const API_BASE_URL = `http://localhost:5002`; // Your backend URL
+    const API_BASE_URL = `https://rd-genral-store.netlify.app/`; // Your backend URL
     const AUTH_API_BASE_URL = 'http://localhost:5002/auth'; // Authentication-specific base URL
 
 
