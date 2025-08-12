@@ -9,9 +9,9 @@ export const AppProvider = ({ children }) => {
     const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
 
     // --- API URLS ---
- const API_BASE_URL = process.env.NODE_ENV === 'production'
-        ? 'https://rd-backend-0e7p.onrender.com'
-        : 'http://localhost:5002';
+    const API_BASE_URL = `http://localhost:5002`; // Your backend URL
+    const AUTH_API_BASE_URL = 'http://localhost:5002/auth'; // Authentication-specific base URL
+
 
     // --- State Variables ---
     const [products, setProducts] = useState([]);
