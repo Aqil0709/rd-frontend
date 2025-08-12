@@ -5,31 +5,54 @@ import { Truck, MapPin, CreditCard, ChevronDown, Package, CheckCircle, Loader, W
 
 /**
  * A custom hook to dynamically load the Razorpay checkout script.
+ * It now returns a boolean to indicate if the script is loaded.
  */
 const useRazorpayScript = () => {
-  useEffect(() => {
-    const script = document.createElement('script');
-    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
-    script.async = true;
-    document.body.appendChild(script);
+    const [isScriptLoaded, setIsScriptLoaded] = useState(false);
 
-    return () => {
-      // Clean up the script when the component unmounts
-      if (document.body.contains(script)) {
-        document.body.removeChild(script);
-      }
-    };
-  }, []);
+    useEffect(() => {
+        // Check if the script is already present to prevent multiple loads
+        if (document.querySelector('script[src="https://checkout.razorpay.com/v1/checkout.js"]')) {
+            setIsScriptLoaded(true);
+            return;
+        }
+
+        const script = document.createElement('script');
+        script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+        script.async = true;
+
+        // Set the state to true once the script has successfully loaded
+        script.onload = () => {
+            setIsScriptLoaded(true);
+        };
+
+        // Handle errors in case the script fails to load
+        script.onerror = () => {
+            console.error("Razorpay script failed to load.");
+            setIsScriptLoaded(false);
+        };
+
+        document.body.appendChild(script);
+
+        return () => {
+            // Clean up the script when the component unmounts
+            if (document.body.contains(script)) {
+                document.body.removeChild(script);
+            }
+        };
+    }, []);
+
+    return isScriptLoaded;
 };
 
 const CheckoutPage = () => {
-    // Load the Razorpay script when the component mounts
-    useRazorpayScript();
+    // Load the Razorpay script and get its loading status
+    const isRazorpayScriptLoaded = useRazorpayScript();
 
     // Destructure functions from context
-    const { 
-        cart, t, currentUser, navigate, 
-        addresses, addAddress, showNotification, 
+    const {
+        cart, t, currentUser, navigate,
+        addresses, addAddress, showNotification,
         setCart,
         createRazorpayOrder,
         verifyRazorpayPayment
@@ -140,15 +163,19 @@ const CheckoutPage = () => {
 
     // --- Razorpay Payment Handler ---
     const handleSubmitPayment = async () => {
-        if (!deliveryAddress || !deliveryAddress.id) { // Check for address and its ID
-            showNotification(t('pleaseSelectOrAddAddress'), 'error');
-            // setActiveStep(1); // THIS LINE WAS THE PROBLEM
+        // First, check if the Razorpay script has loaded and if an address is selected.
+        if (!isRazorpayScriptLoaded) {
+            showNotification(t('paymentGatewayNotLoaded'), 'error');
             return;
         }
+        if (!deliveryAddress || !deliveryAddress.id) {
+            showNotification(t('pleaseSelectOrAddAddress'), 'error');
+            return;
+        }
+
         setIsSubmitting(true);
 
         try {
-            // Pass the deliveryAddress.id to the context function
             const orderData = await createRazorpayOrder(deliveryAddress.id, total);
             if (!orderData || !orderData.order_id || !orderData.amount) {
                 throw new Error(t('failedToCreateRazorpayOrder'));
@@ -177,7 +204,7 @@ const CheckoutPage = () => {
                             throw new Error(t('paymentVerificationFailed'));
                         }
                     } catch (error) {
-                         showNotification(error.message || t('paymentVerificationFailed'), 'error');
+                           showNotification(error.message || t('paymentVerificationFailed'), 'error');
                     }
                 },
                 prefill: {
@@ -200,7 +227,7 @@ const CheckoutPage = () => {
 
             const rzp = new window.Razorpay(options);
             rzp.open();
-            
+
             rzp.on('payment.failed', function (response){
                 showNotification(`${t('paymentFailed')}: ${response.error.description}`, 'error');
             });
@@ -385,12 +412,18 @@ const CheckoutPage = () => {
                                     <button
                                         type="button"
                                         onClick={handleSubmitPayment}
-                                        disabled={isSubmitting}
+                                        // The button is now disabled until the script is loaded and a delivery address is selected
+                                        disabled={isSubmitting || !isRazorpayScriptLoaded || !deliveryAddress}
                                         className="w-full mt-6 py-3 bg-indigo-600 text-white text-lg font-semibold rounded-md hover:bg-indigo-700 transition-colors duration-200 ease-in-out disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
                                     >
                                         {isSubmitting ? <Loader className="animate-spin h-5 w-5 mr-2" /> : <CreditCard className="h-5 w-5 mr-2" />}
                                         {isSubmitting ? t('processing') : `${t('Pay Securely')} ₹${total.toFixed(2)}`}
                                     </button>
+                                    {!isRazorpayScriptLoaded && (
+                                        <div className="mt-4 text-center text-gray-500 text-sm">
+                                            {t('Loading payment gateway...')}
+                                        </div>
+                                    )}
                                 </div>
                             )}
                         </div>
