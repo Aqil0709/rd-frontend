@@ -10,16 +10,11 @@ export const AppProvider = ({ children }) => {
     const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
 
     // --- DYNAMIC API URLS ---
-<<<<<<< HEAD
+
     const API_BASE_URL = process.env.NODE_ENV === 'production'
         ? 'https://rd-backend-0e7p.onrender.com/api'
         : 'http://localhost:5002/api';
-=======
-    // This will use your live Render URL in production and localhost for development
-    const API_BASE_URL = process.env.NODE_ENV === 'production'
-        ? 'https://rd-backend-0e7p.onrender.com'
-        : 'http://localhost:5002';
->>>>>>> a7611f463a4872b586f5015bab98bf978eb274a1
+
 
     // --- State Variables ---
     const [products, setProducts] = useState([]);
@@ -84,14 +79,14 @@ export const AppProvider = ({ children }) => {
         try {
             console.log("--- FRONTEND LOG: Sending this cart to backend ---", JSON.stringify(cart, null, 2));
             console.log("createRazorpayOrder: Sending request for user", currentUser._id);
-=======
+
         if (!currentUser) {
             showNotification(t('pleaseLoginToPlaceOrder'), 'error');
             throw new Error("User not logged in.");
         }
         const token = localStorage.getItem('shopkartToken');
         try {
->>>>>>> a7611f463a4872b586f5015bab98bf978eb274a1
+ a7611f463a4872b586f5015bab98bf978eb274a1
             const response = await fetch(`${API_BASE_URL}/payment/create-order`, {
                 method: 'POST',
                 headers: {
@@ -100,18 +95,18 @@ export const AppProvider = ({ children }) => {
                 },
                 body: JSON.stringify({
                     amount: totalAmount,
-<<<<<<< HEAD
+
                     deliveryAddressId: deliveryAddressId,
                     cart: cart.map(item => ({
                         // --- THIS IS THE FIX ---
                         // Send the correct product ID to the backend
                         productId: item.productId,
-=======
+
                     receipt: `receipt_order_${new Date().getTime()}`,
                     deliveryAddressId: deliveryAddressId, // THIS LINE IS CRUCIAL
                     cart: cart.map(item => ({
                         productId: item.id,
->>>>>>> a7611f463a4872b586f5015bab98bf978eb274a1
+ a7611f463a4872b586f5015bab98bf978eb274a1
                         quantity: item.quantity,
                         price: item.price,
                         originalPrice: item.originalPrice || item.price,
