@@ -36,14 +36,15 @@ const OrderRow = ({ order, t }) => {
         }
     };
 
-    // --- FIX: Parse the items_details string into an array ---
+    // Parse the items_details string into an array
     const items = JSON.parse(order.items_details || '[]');
 
     return (
         <tr key={order._id} className="hover:bg-gray-50">
-            {/* --- FIX: Use correct property names from the backend model --- */}
             <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">#{order._id.slice(-6)}</td>
             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{order.user_id?.name || 'N/A'}</td>
+            {/* --- NEW: Added Mobile Number Column --- */}
+            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{order.user_id?.mobileNumber || 'N/A'}</td>
             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">₹{parseFloat(order.total_amount).toLocaleString('en-IN')}</td>
             <td className="px-6 py-4 whitespace-nowrap">
                 <select 
@@ -102,12 +103,11 @@ const OrderManagementSection = () => {
     const filteredOrders = orders.filter(order => {
         if (!order) return false;
 
-        // --- FIX: Use correct property name 'payment_method' ---
         const matchesPaymentType = () => {
             if (paymentTypeFilter === 'All') return true;
             const paymentMethod = order.payment_method || '';
             if (paymentTypeFilter === 'UPI') {
-                return paymentMethod === 'Razorpay'; // Assuming Razorpay is UPI
+                return paymentMethod === 'Razorpay';
             }
             if (paymentTypeFilter === 'COD') {
                 return paymentMethod === 'COD';
@@ -149,7 +149,6 @@ const OrderManagementSection = () => {
             <h2 className="text-3xl font-bold text-gray-800 mb-6">{t('Order Management')}</h2>
             
             <div className="mb-4 flex flex-wrap gap-4 items-center">
-                {/* Payment Type Filter Dropdown */}
                 <div className="flex items-center">
                     <label htmlFor="paymentTypeFilter" className="mr-2 text-gray-700">{t('Filter by Payment Type')}:</label>
                     <select
@@ -159,12 +158,11 @@ const OrderManagementSection = () => {
                         className="p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
                     >
                         <option value="All">{t('All')}</option>
-                        <option value="UPI">{t('Online')}</option> {/* Changed to Online for clarity */}
+                        <option value="UPI">{t('Online')}</option>
                         <option value="COD">{t('COD')}</option>
                     </select>
                 </div>
 
-                {/* Order Status Filter Dropdown */}
                 <div className="flex items-center">
                     <label htmlFor="statusFilter" className="mr-2 text-gray-700">{t('Filter by Status')}:</label>
                     <select
@@ -193,6 +191,8 @@ const OrderManagementSection = () => {
                             <tr>
                                 <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">{t('orderId')}</th>
                                 <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">{t('customer')}</th>
+                                {/* --- NEW: Added Mobile Number Header --- */}
+                                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">{t('mobileNumber')}</th>
                                 <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">{t('totalAmount')}</th>
                                 <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">{t('status')}</th>
                                 <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">{t('paymentStatus')}</th>
@@ -203,7 +203,6 @@ const OrderManagementSection = () => {
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
                             {filteredOrders.map(order => (
-                                // --- FIX: Use order._id for the key ---
                                 <OrderRow key={order._id} order={order} t={t} />
                             ))}
                         </tbody>
