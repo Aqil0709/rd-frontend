@@ -167,6 +167,8 @@ const StockManagementSection = () => {
             </div>
         );
     }
+    console.log("Products Array:", products);
+console.log("Stock Array:", stock);
 
     return (
         <div className="bg-white shadow-xl rounded-lg p-8 md:p-10 border border-gray-200">
@@ -287,53 +289,58 @@ const StockManagementSection = () => {
                                 <th className="px-6 py-3 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">{t('actions')}</th>
                             </tr>
                         </thead>
-                        <tbody className="bg-white divide-y divide-gray-200">
-                            {stock.map(stockItem => {
-                                const product = products.find(p => p.id === stockItem.product_id);
-                                const currentUpdateStatus = updateStatus[stockItem.product_id];
-                                return (
-                                    <tr key={stockItem.product_id} className="hover:bg-gray-50 transition-colors duration-150">
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                                            {product ? product.name : `${t('productID')}: ${stockItem.product_id} (${t('unknownProduct')})`}
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                                            {stockItem.quantity}
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap">
-                                            <input
-                                                type="number"
-                                                min="0"
-                                                value={stockQuantities[stockItem.product_id] !== undefined ? stockQuantities[stockItem.product_id] : stockItem.quantity}
-                                                onChange={(e) => handleQuantityChange(stockItem.product_id, e.target.value)}
-                                                className="w-28 p-2 border border-gray-300 rounded-md shadow-sm text-sm focus:ring-indigo-500 focus:border-indigo-500"
-                                                aria-label={`${t('updateQuantityFor')} ${product ? product.name : stockItem.product_id}`}
-                                            />
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                                            <button
-                                                onClick={() => handleUpdateStock(stockItem.product_id)}
-                                                className="bg-indigo-600 text-white px-5 py-2 rounded-lg flex items-center justify-center ml-auto hover:bg-indigo-700 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
-                                                disabled={currentUpdateStatus?.status === 'loading' || isLoadingStock}
-                                            >
-                                                {currentUpdateStatus?.status === 'loading' ? (
-                                                    <>
-                                                        <Spinner className="h-4 w-4" color="border-white" />
-                                                        {t('updating')}
-                                                    </>
-                                                ) : (
-                                                    t('Update')
-                                                )}
-                                            </button>
-                                            {currentUpdateStatus && currentUpdateStatus.status !== 'loading' && (
-                                                <p className={`mt-1 text-xs ${currentUpdateStatus.status === 'success' ? 'text-green-600' : 'text-red-600'}`}>
-                                                    {currentUpdateStatus.message}
-                                                </p>
-                                            )}
-                                        </td>
-                                    </tr>
-                                );
-                            })}
-                        </tbody>
+
+<tbody className="bg-white divide-y divide-gray-200">
+    {stock.map(stockItem => {
+        // Find the full product details from the 'products' array
+        // by matching the ID from the 'stockItem'.
+        const product = products.find(p => p.id === stockItem.id);
+        const currentUpdateStatus = updateStatus[stockItem.id];
+
+        return (
+            <tr key={stockItem.id} className="hover:bg-gray-50 transition-colors duration-150">
+                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                    {/* If the product is found, show its name. Otherwise, show the ID as a fallback. */}
+                    {product ? product.name : `ID: ${stockItem.id}`}
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                    {stockItem.quantity}
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap">
+                    <input
+                        type="number"
+                        min="0"
+                        value={stockQuantities[stockItem.id] !== undefined ? stockQuantities[stockItem.id] : stockItem.quantity}
+                        onChange={(e) => handleQuantityChange(stockItem.id, e.target.value)}
+                        className="w-28 p-2 border border-gray-300 rounded-md shadow-sm text-sm focus:ring-indigo-500 focus:border-indigo-500"
+                        aria-label={`${t('updateQuantityFor')} ${product ? product.name : stockItem.id}`}
+                    />
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                    <button
+                        onClick={() => handleUpdateStock(stockItem.id)}
+                        className="bg-indigo-600 text-white px-5 py-2 rounded-lg flex items-center justify-center ml-auto hover:bg-indigo-700 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+                        disabled={currentUpdateStatus?.status === 'loading' || isLoadingStock}
+                    >
+                         {currentUpdateStatus?.status === 'loading' ? (
+                            <>
+                                <Spinner className="h-4 w-4" color="border-white" />
+                                {t('updating')}
+                            </>
+                        ) : (
+                            t('Update')
+                        )}
+                    </button>
+                    {currentUpdateStatus && currentUpdateStatus.status !== 'loading' && (
+                        <p className={`mt-1 text-xs ${currentUpdateStatus.status === 'success' ? 'text-green-600' : 'text-red-600'}`}>
+                            {currentUpdateStatus.message}
+                        </p>
+                    )}
+                </td>
+            </tr>
+        );
+    })}
+</tbody>
                     </table>
                 </div>
             )}

@@ -5,12 +5,12 @@ import { locales } from '../translations/locales'; // Ensure this path is correc
 export const AppContext = createContext();
 
 export const AppProvider = ({ children }) => {
-    // IMPORTANT: Access __app_id here provided by the Canvas environment
     const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
 
-    // --- API URLS ---
-    const API_BASE_URL = `http://localhost:5002`; // Your backend URL
-    const AUTH_API_BASE_URL = 'http://localhost:5002/auth'; // Authentication-specific base URL
+    // --- DYNAMIC API URLS ---
+    const API_BASE_URL = process.env.NODE_ENV === 'production'
+        ? 'https://rd-backend-0e7p.onrender.com/api'
+        : 'http://localhost:5002/api';
 
     // --- State Variables ---
     const [products, setProducts] = useState([]);
@@ -60,42 +60,94 @@ export const AppProvider = ({ children }) => {
         return () => clearTimeout(timer);
     }, []);
 
-    // --- Order Status for Payment Polling ---
-    const getOrderStatus = useCallback(async (orderId) => {
+    // --- Razorpay Order Functions ---
+    const createRazorpayOrder = useCallback(async (deliveryAddressId, totalAmount) => {
+        if (!currentUser || !currentUser._id) { // Ensure _id is present
+            showNotification(t('pleaseLoginToPlaceOrder'), 'error');
+            throw new Error("User not logged in or user ID missing.");
+        }
         const token = localStorage.getItem('shopkartToken');
-        if (!currentUser || !token) {
-            console.error("User not logged in or token missing for polling.");
-            throw new Error("Authentication required.");
+        if (!token) {
+            showNotification(t('authenticationRequired'), 'error');
+            throw new Error("Authentication token missing.");
         }
         try {
-            const response = await fetch(`${API_BASE_URL}/orders/${orderId}/status`, {
+            console.log("--- FRONTEND LOG: Sending this cart to backend ---", JSON.stringify(cart, null, 2));
+            console.log("createRazorpayOrder: Sending request for user", currentUser._id);
+            const response = await fetch(`${API_BASE_URL}/payment/create-order`, {
+                method: 'POST',
                 headers: {
+                    'Content-Type': 'application/json',
                     'Authorization': `Bearer ${token}`
-                }
+                },
+                body: JSON.stringify({
+                    amount: totalAmount,
+                    deliveryAddressId: deliveryAddressId,
+                    cart: cart.map(item => ({
+                        // --- THIS IS THE FIX ---
+                        // Send the correct product ID to the backend
+                        productId: item.productId,
+                        quantity: item.quantity,
+                        price: item.price,
+                        originalPrice: item.originalPrice || item.price,
+                        images: item.images
+                    }))
+                }),
             });
-
+            const data = await response.json();
             if (!response.ok) {
-                const errorData = await response.json().catch(() => ({ message: 'Failed to get order status' }));
-                throw new Error(errorData.message);
+                throw new Error(data.message || 'Failed to create Razorpay order');
             }
-            return await response.json();
-        } catch (err) {
-            console.error("Error fetching order status:", err);
-            throw err;
+            return data;
+        } catch (error) {
+            console.error("Error creating Razorpay order:", error);
+            showNotification(error.message || 'Failed to create payment order', 'error');
+            throw error;
         }
-    }, [currentUser, API_BASE_URL]);
+    }, [currentUser, cart, showNotification, t, API_BASE_URL]);
+
+    const verifyRazorpayPayment = useCallback(async (verificationData) => {
+        const token = localStorage.getItem('shopkartToken');
+        if (!token) {
+            showNotification(t('authenticationRequired'), 'error');
+            throw new Error("Authentication token missing.");
+        }
+        try {
+            const response = await fetch(`${API_BASE_URL}/payment/verify-payment`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify(verificationData),
+            });
+            const data = await response.json();
+            if (!response.ok) {
+                throw new Error(data.message || 'Payment verification failed');
+            }
+            return data;
+        } catch (error) {
+            console.error("Error verifying Razorpay payment:", error);
+            showNotification(error.message || 'Payment verification failed', 'error');
+            throw error;
+        }
+    }, [showNotification, API_BASE_URL, t]);
 
     // --- Fetch a single order by ID ---
     const fetchOrderById = useCallback(async (orderId) => {
-        if (!currentUser) {
+        if (!currentUser || !currentUser._id) { // Ensure _id is present
             showNotification(t('pleaseLoginToViewOrder'), 'error');
-            throw new Error("User not logged in.");
+            throw new Error("User not logged in or user ID missing.");
         }
         setIsLoadingOrders(true);
         setErrorOrders(null);
         const token = localStorage.getItem('shopkartToken');
+        if (!token) {
+            showNotification(t('authenticationRequired'), 'error');
+            throw new Error("Authentication token missing.");
+        }
         try {
-            const response = await fetch(`${API_BASE_URL}/orders/${currentUser.id}/${orderId}`, {
+            const response = await fetch(`${API_BASE_URL}/orders/${currentUser._id}/${orderId}`, {
                 headers: {
                     'Authorization': `Bearer ${token}`
                 }
@@ -117,117 +169,6 @@ export const AppProvider = ({ children }) => {
         }
     }, [currentUser, showNotification, t, API_BASE_URL]);
 
-    // --- Place COD Order ---
-    const placeCodOrder = async (deliveryAddressId) => {
-        try {
-            if (!currentUser || !currentUser.id) {
-                showNotification(t('pleaseLogInToPlaceOrder'), 'error');
-                return;
-            }
-            const token = localStorage.getItem('shopkartToken');
-            if (!token) {
-                showNotification(t('authenticationRequired'), 'error');
-                navigate('login');
-                return;
-            }
-
-            const response = await fetch(`${API_BASE_URL}/orders/user/${currentUser.id}/orders/cod`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                },
-                body: JSON.stringify({
-                    deliveryAddressId,
-                    cart: cart.map(item => ({
-                        productId: item.id,
-                        quantity: item.quantity,
-                        price: item.price,
-                        originalPrice: item.originalPrice || item.price
-                    }))
-                })
-            });
-
-            const data = await response.json();
-            if (!response.ok) {
-                throw new Error(data.message || t('failedToPlaceOrder'));
-            }
-
-            showNotification(t('orderPlacedSuccessfully'), 'success');
-            setCart([]);
-            navigate('orderConfirmation', data);
-            return data;
-
-        } catch (error) {
-            console.error('Error in AppContext placeCodOrder:', error);
-            showNotification(error.message || t('failedToPlaceOrder'), 'error');
-            throw error;
-        }
-    };
-
-    // --- Place UPI Order ---
-    const placeUpiOrder = useCallback(async (deliveryAddressId, transactionRef) => {
-        if (!currentUser) {
-            showNotification(t('pleaseLoginToPlaceOrder'), 'error');
-            navigate('login');
-            throw new Error("User not logged in.");
-        }
-        const token = localStorage.getItem('shopkartToken');
-
-        try {
-            const response = await fetch(`${API_BASE_URL}/orders/upi-initiate/${currentUser.id}`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                },
-                body: JSON.stringify({
-                    deliveryAddressId,
-                    transactionRef,
-                    cart: cart.map(item => ({
-                        productId: item.id,
-                        quantity: item.quantity,
-                        price: item.price,
-                        originalPrice: item.originalPrice || item.price
-                    }))
-                })
-            });
-
-            const data = await response.json();
-            if (!response.ok) {
-                throw new Error(data.message || 'Failed to initiate order');
-            }
-            return data;
-        } catch (error) {
-            console.error("Error in placeUpiOrder:", error);
-            showNotification(error.message || 'Failed to initiate order', 'error');
-            throw error;
-        }
-    }, [currentUser, navigate, showNotification, t, API_BASE_URL, cart]);
-
-    // --- Cancel Order ---
-    const cancelOrder = useCallback(async (orderId) => {
-        if (!currentUser) {
-            showNotification(t('pleaseLoginToCancel'), 'error');
-            throw new Error("User not logged in.");
-        }
-        const token = localStorage.getItem('shopkartToken');
-
-        const response = await fetch(`${API_BASE_URL}/orders/${orderId}/cancel`, {
-            method: 'PUT',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-            },
-        });
-
-        const data = await response.json();
-        if (!response.ok) {
-            throw new Error(data.message || t('failedToCancelOrder'));
-        }
-        return data;
-    }, [currentUser, showNotification, t, API_BASE_URL]);
-
     // --- Fetch Products ---
     const fetchProducts = useCallback(async () => {
         setIsLoading(true);
@@ -236,7 +177,8 @@ export const AppProvider = ({ children }) => {
             const response = await fetch(`${API_BASE_URL}/products`);
             if (response.ok) {
                 const data = await response.json();
-                setProducts(data);
+                const productsWithNormalizedId = data.map(p => ({ ...p, _id: p.id }));
+                setProducts(productsWithNormalizedId);
             } else {
                 throw new Error(`Failed to fetch products: ${response.status}`);
             }
@@ -250,12 +192,16 @@ export const AppProvider = ({ children }) => {
 
     // --- Fetch My Orders (User Specific) ---
     const fetchMyOrders = useCallback(async () => {
-        if (!currentUser) {
+        if (!currentUser || !currentUser._id) { // Ensure _id is present
             return;
         }
         setIsLoadingOrders(true);
         setErrorOrders(null);
         const token = localStorage.getItem('shopkartToken');
+        if (!token) {
+            showNotification(t('authenticationRequired'), 'error');
+            return;
+        }
         try {
             const response = await fetch(`${API_BASE_URL}/orders/my-orders`, {
                 headers: {
@@ -274,7 +220,7 @@ export const AppProvider = ({ children }) => {
         } finally {
             setIsLoadingOrders(false);
         }
-    }, [currentUser, API_BASE_URL]);
+    }, [currentUser, API_BASE_URL, showNotification, t]);
 
     // --- Fetch All Orders (Admin Specific) ---
     const fetchOrders = useCallback(async () => {
@@ -284,6 +230,10 @@ export const AppProvider = ({ children }) => {
         setIsLoadingOrders(true);
         setErrorOrders(null);
         const token = localStorage.getItem('shopkartToken');
+        if (!token) {
+            showNotification(t('authenticationRequired'), 'error');
+            return;
+        }
         try {
             const response = await fetch(`${API_BASE_URL}/orders`, {
                 headers: {
@@ -302,7 +252,7 @@ export const AppProvider = ({ children }) => {
         } finally {
             setIsLoadingOrders(false);
         }
-    }, [currentUser, API_BASE_URL]);
+    }, [currentUser, API_BASE_URL, showNotification, t]);
 
     // --- Fetch Stock (Admin Specific) ---
     const fetchStock = useCallback(async () => {
@@ -312,6 +262,10 @@ export const AppProvider = ({ children }) => {
         setIsLoadingStock(true);
         setErrorStock(null);
         const token = localStorage.getItem('shopkartToken');
+        if (!token) {
+            showNotification(t('authenticationRequired'), 'error');
+            return;
+        }
         try {
             const response = await fetch(`${API_BASE_URL}/stock`, {
                 headers: {
@@ -330,7 +284,7 @@ export const AppProvider = ({ children }) => {
         } finally {
             setIsLoadingStock(false);
         }
-    }, [currentUser, API_BASE_URL]);
+    }, [currentUser, API_BASE_URL, showNotification, t]);
 
     // --- Update Order Status (Admin Specific) ---
     const updateOrderStatus = useCallback(async (orderId, newStatus) => {
@@ -339,21 +293,31 @@ export const AppProvider = ({ children }) => {
             throw new Error("Unauthorized");
         }
         const token = localStorage.getItem('shopkartToken');
-
-        const response = await fetch(`${API_BASE_URL}/orders/${orderId}/status`, {
-            method: 'PUT',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-            },
-            body: JSON.stringify({ status: newStatus })
-        });
-
-        const data = await response.json();
-        if (!response.ok) {
-            throw new Error(data.message || 'Failed to update order status');
+        if (!token) {
+            showNotification(t('authenticationRequired'), 'error');
+            throw new Error("Authentication token missing.");
         }
-        return data;
+
+        try {
+            const response = await fetch(`${API_BASE_URL}/orders/${orderId}/status`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({ status: newStatus })
+            });
+
+            const data = await response.json();
+            if (!response.ok) {
+                throw new Error(data.message || 'Failed to update order status');
+            }
+            return data;
+        } catch (error) {
+            console.error('CRITICAL ERROR during order status update:', error);
+            showNotification(error.message || t('serverErrorUpdatingOrderStatus'), 'error');
+            throw error;
+        }
     }, [currentUser, showNotification, t, API_BASE_URL]);
 
     // --- Update Stock (Admin Specific) ---
@@ -365,6 +329,10 @@ export const AppProvider = ({ children }) => {
         setIsLoadingStock(true);
         setErrorStock(null);
         const token = localStorage.getItem('shopkartToken');
+        if (!token) {
+            showNotification(t('authenticationRequired'), 'error');
+            throw new Error("Authentication token missing.");
+        }
         try {
             const response = await fetch(`${API_BASE_URL}/stock/${productId}`, {
                 method: 'PUT',
@@ -376,6 +344,7 @@ export const AppProvider = ({ children }) => {
             });
             if (response.ok) {
                 await fetchStock();
+                await fetchProducts(); 
                 showNotification(t('stockUpdatedSuccessfully'), 'success');
             } else {
                 const errorData = await response.json();
@@ -389,7 +358,7 @@ export const AppProvider = ({ children }) => {
         } finally {
             setIsLoadingStock(false);
         }
-    }, [currentUser, fetchStock, showNotification, t, API_BASE_URL]);
+    }, [currentUser, fetchStock, fetchProducts, showNotification, t, API_BASE_URL]);
 
     // --- Add Stock Item (Admin Specific) ---
     const addStockItem = useCallback(async (productId, quantity, productName) => {
@@ -400,6 +369,10 @@ export const AppProvider = ({ children }) => {
         setIsLoadingStock(true);
         setErrorStock(null);
         const token = localStorage.getItem('shopkartToken');
+        if (!token) {
+            showNotification(t('authenticationRequired'), 'error');
+            throw new Error("Authentication token missing.");
+        }
         try {
             const response = await fetch(`${API_BASE_URL}/stock`, {
                 method: 'POST',
@@ -462,9 +435,8 @@ export const AppProvider = ({ children }) => {
                     }
                 }
             };
-            // Use the global __app_id provided by Canvas
-            const apiKey = typeof __app_id !== 'undefined' ? __app_id : '';
-            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+            const apiKey = ""; 
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
 
             const llmResponse = await fetch(apiUrl, {
                 method: 'POST',
@@ -513,7 +485,10 @@ export const AppProvider = ({ children }) => {
                 throw new Error(newProductData.message || t('failedToAddGeneratedProduct'));
             }
 
-            const newProductId = newProductData.productId;
+            const newProductId = newProductData.productId; 
+            if (!newProductId) { 
+                throw new Error("Generated product ID not received from backend.");
+            }
 
             await addStockItem(newProductId, generatedQuantity, generatedProductName);
 
@@ -523,6 +498,7 @@ export const AppProvider = ({ children }) => {
             console.error("Error generating and adding product:", err);
             setError(err.message || t('errorGeneratingProduct'));
             showNotification(err.message || t('errorGeneratingProduct'), 'error');
+            throw err;
         } finally {
             setIsLoading(false);
         }
@@ -539,14 +515,14 @@ export const AppProvider = ({ children }) => {
         const storedToken = localStorage.getItem('shopkartToken');
         if (storedUser && storedToken) {
             const userData = JSON.parse(storedUser);
-            setCurrentUser(userData);
+            setCurrentUser({ ...userData, _id: userData._id || userData.id });
         }
     }, []);
 
     // --- Fetch User-Specific Data on User Change ---
     useEffect(() => {
         const fetchDataOnUserChange = async () => {
-            if (currentUser) {
+            if (currentUser && currentUser._id) { // Ensure _id is present
                 const token = localStorage.getItem('shopkartToken');
                 const headers = {
                     'Content-Type': 'application/json',
@@ -554,13 +530,24 @@ export const AppProvider = ({ children }) => {
                 };
 
                 try {
-                    const cartResponse = await fetch(`${API_BASE_URL}/cart/${currentUser.id}`, { headers });
-                    if (cartResponse.ok) setCart(await cartResponse.json());
+                    const cartResponse = await fetch(`${API_BASE_URL}/cart/${currentUser._id}`, { headers });
+                    if (cartResponse.ok) {
+                        const data = await cartResponse.json();
+                        setCart(data.cartItems || data || []); 
+                    } else {
+                        console.error('Error fetching cart:', await cartResponse.json());
+                        setCart([]);
+                    }
                 } catch (error) { console.error('Error fetching cart:', error); }
 
                 try {
-                    const addressResponse = await fetch(`${API_BASE_URL}/profile/${currentUser.id}/addresses`, { headers });
-                    if (addressResponse.ok) setAddresses(await addressResponse.json());
+                    const addressResponse = await fetch(`${API_BASE_URL}/profile/${currentUser._id}/addresses`, { headers });
+                    if (addressResponse.ok) {
+                        setAddresses(await addressResponse.json());
+                    } else {
+                        console.error('Error fetching addresses:', await addressResponse.json());
+                        setAddresses([]);
+                    }
                 } catch (error) { console.error('Error fetching addresses:', error); }
 
                 if (currentUser.role === 'admin') {
@@ -570,7 +557,7 @@ export const AppProvider = ({ children }) => {
                     fetchMyOrders();
                 }
             } else {
-                // Clear user-specific data on logout
+                // Clear user-specific data on logout or no user
                 setCart([]);
                 setAddresses([]);
                 setOrders([]);
@@ -584,9 +571,9 @@ export const AppProvider = ({ children }) => {
     // --- Authentication Functions ---
     const register = async (userData) => {
         setAuthLoading(true);
-        setAuthError(null); // Clear previous error
+        setAuthError(null);
         try {
-            const response = await fetch(`${AUTH_API_BASE_URL}/register`, {
+            const response = await fetch(`${API_BASE_URL}/auth/register`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(userData),
@@ -596,7 +583,6 @@ export const AppProvider = ({ children }) => {
                 setAuthError(data.message || t('registrationFailed'));
                 return { success: false, message: data.message || t('registrationFailed') };
             }
-            // Upon successful registration, automatically log in the user
             await login({ mobileNumber: userData.mobileNumber, password: userData.password });
             return { success: true, message: t('registrationSuccessful') };
         } catch (error) {
@@ -608,33 +594,33 @@ export const AppProvider = ({ children }) => {
         }
     };
 
-   const login = async (userData) => {
-        setAuthLoading(true);
-        setAuthError(null);
-        try {
-            const response = await fetch(`${AUTH_API_BASE_URL}/login`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(userData),
-                credentials: 'include' // <-- ADD THIS LINE
-            });
-            const data = await response.json();
-            if (!response.ok) {
-                setAuthError(data.message || t('loginFailed'));
-                return;
-            }
-            const user = { id: data.id, name: data.name, mobileNumber: data.mobileNumber, role: data.role };
-            setCurrentUser(user);
-            localStorage.setItem('shopkartUser', JSON.stringify(user));
-            localStorage.setItem('shopkartToken', data.token);
-            navigate('home');
-        } catch (error) {
-            console.error('Login failed:', error);
-            setAuthError(t('unexpectedLoginError'));
-        } finally {
-            setAuthLoading(false);
-        }
-    };
+    const login = async (userData) => {
+        setAuthLoading(true);
+        setAuthError(null);
+        try {
+            const response = await fetch(`${API_BASE_URL}/auth/login`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(userData),
+                credentials: 'include'
+            });
+            const data = await response.json();
+            if (!response.ok) {
+                setAuthError(data.message || t('loginFailed'));
+                return;
+            }
+            const user = { id: data.id, _id: data._id || data.id, name: data.name, mobileNumber: data.mobileNumber, role: data.role };
+            setCurrentUser(user);
+            localStorage.setItem('shopkartUser', JSON.stringify(user));
+            localStorage.setItem('shopkartToken', data.token);
+            navigate('home');
+        } catch (error) {
+            console.error('Login failed:', error);
+            setAuthError(t('unexpectedLoginError'));
+        } finally {
+            setAuthLoading(false);
+        }
+    };
 
     const logout = () => {
         setCurrentUser(null);
@@ -648,64 +634,56 @@ export const AppProvider = ({ children }) => {
     };
 
     // --- 2Factor OTP & Password Reset Functions ---
-
     const sendOtp = async (mobileNumber) => {
         try {
-            const response = await fetch(`${AUTH_API_BASE_URL}/send-otp`, {
+            const response = await fetch(`${API_BASE_URL}/auth/send-otp`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ mobileNumber }),
             });
-            const data = await response.json();
-            return data;
+            return await response.json();
         } catch (error) {
-            console.error("Error sending OTP via backend:", error);
+            console.error("Error sending OTP:", error);
             return { success: false, message: t('failedToSendOtpNetwork') };
         }
     };
 
     const verifyOtp = async (mobileNumber, otp, sessionId) => {
         try {
-            const response = await fetch(`${AUTH_API_BASE_URL}/verify-otp`, {
+            const response = await fetch(`${API_BASE_URL}/auth/verify-otp`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ mobileNumber, otp, sessionId }),
             });
-            const data = await response.json();
-            return data;
+            return await response.json();
         } catch (error) {
-            console.error("Error verifying OTP via backend:", error);
+            console.error("Error verifying OTP:", error);
             return { success: false, message: t('otpVerificationFailedNetwork') };
         }
     };
 
-    // NEW: Function to send OTP for password reset
     const sendPasswordResetOtp = async (mobileNumber) => {
         try {
-            // This endpoint should be specifically for password resets
-            const response = await fetch(`${AUTH_API_BASE_URL}/send-reset-otp`, {
+            const response = await fetch(`${API_BASE_URL}/auth/send-reset-otp`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ mobileNumber }),
             });
-            const data = await response.json();
-            return data; // Expects { success: true, sessionId: '...' } or { success: false, message: '...' }
+            return await response.json();
         } catch (error) {
             console.error("Error sending password reset OTP:", error);
             return { success: false, message: t('failedToSendOtpNetwork') };
         }
     };
 
-    // NEW: Function to reset the password after OTP verification
     const resetPassword = async ({ mobileNumber, password, otpSessionId }) => {
         try {
-            const response = await fetch(`${AUTH_API_BASE_URL}/reset-password`, {
+            const response = await fetch(`${API_BASE_URL}/auth/reset-password`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ mobileNumber, newPassword: password, sessionId: otpSessionId }),
             });
-            const data = await response.json();
-            return data; // Expects { success: true } or { success: false, message: '...' }
+            return await response.json();
         } catch (error) {
             console.error("Error resetting password:", error);
             return { success: false, message: t('passwordResetFailedNetwork') };
@@ -715,33 +693,44 @@ export const AppProvider = ({ children }) => {
 
     // --- Cart Management Functions ---
     const addToCart = async (productToAdd) => {
-        if (!currentUser) {
+        if (!currentUser || !currentUser._id) { 
             showNotification(t('pleaseLoginToAddCart'), 'info');
             navigate('login');
             return;
         }
         const token = localStorage.getItem('shopkartToken');
+        if (!token) {
+            showNotification("Authentication token missing. Please log in.", 'error');
+            navigate('login');
+            return;
+        }
+
         try {
-            const response = await fetch(`${API_BASE_URL}/cart/${currentUser.id}/add`, {
+            console.log("Adding to cart - productToAdd:", productToAdd);
+            console.log("Sending currentUser._id to backend URL:", currentUser._id); 
+            console.log("Sending productId (productToAdd.id from product):", productToAdd.id); 
+
+            const response = await fetch(`${API_BASE_URL}/cart/${currentUser._id}/add`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${token}`
                 },
                 body: JSON.stringify({
-                    id: productToAdd.id,
+                    productId: productToAdd.id, 
                     name: productToAdd.name,
                     price: productToAdd.price,
                     originalPrice: productToAdd.originalPrice || productToAdd.price,
                     images: productToAdd.images
                 }),
             });
-            const updatedCart = await response.json();
+            const responseData = await response.json();
             if (response.ok) {
-                setCart(updatedCart);
+                setCart(responseData.cartItems || []); 
                 showNotification(t('productAddedToCart'), 'success');
             } else {
-                showNotification(updatedCart.message || t('failedToAddCart'), 'error');
+                showNotification(responseData.message || t('failedToAddCart'), 'error');
+                console.error("Failed to add to cart backend response:", responseData);
             }
         } catch (error) {
             console.error('Failed to add to cart:', error);
@@ -750,14 +739,19 @@ export const AppProvider = ({ children }) => {
     };
 
     const updateQuantity = async (productId, newQuantity) => {
-        if (!currentUser) return;
+        if (!currentUser || !currentUser._id) return; 
         const token = localStorage.getItem('shopkartToken');
+        if (!token) {
+            showNotification("Authentication token missing. Please log in.", 'error');
+            navigate('login');
+            return;
+        }
         if (newQuantity <= 0) {
             await removeFromCart(productId);
             return;
         }
         try {
-            const response = await fetch(`${API_BASE_URL}/cart/${currentUser.id}/update/${productId}`, {
+            const response = await fetch(`${API_BASE_URL}/cart/${currentUser._id}/update/${productId}`, {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',
@@ -767,7 +761,7 @@ export const AppProvider = ({ children }) => {
             });
             const updatedCart = await response.json();
             if (response.ok) {
-                setCart(updatedCart);
+                setCart(updatedCart.cartItems || []); 
                 showNotification(t('cartUpdated'), 'success');
             } else {
                 showNotification(updatedCart.message || t('failedToUpdateCart'), 'error');
@@ -779,10 +773,15 @@ export const AppProvider = ({ children }) => {
     };
 
     const removeFromCart = async (productId) => {
-        if (!currentUser) return;
+        if (!currentUser || !currentUser._id) return; 
         const token = localStorage.getItem('shopkartToken');
+        if (!token) {
+            showNotification("Authentication token missing. Please log in.", 'error');
+            navigate('login');
+            return;
+        }
         try {
-            const response = await fetch(`${API_BASE_URL}/cart/${currentUser.id}/remove/${productId}`, {
+            const response = await fetch(`${API_BASE_URL}/cart/${currentUser._id}/remove/${productId}`, {
                 method: 'DELETE',
                 headers: {
                     'Authorization': `Bearer ${token}`
@@ -790,7 +789,7 @@ export const AppProvider = ({ children }) => {
             });
             const updatedCart = await response.json();
             if (response.ok) {
-                setCart(updatedCart);
+                setCart(updatedCart.cartItems || []); 
                 showNotification(t('productRemovedFromCart'), 'success');
             } else {
                 showNotification(updatedCart.message || t('failedToRemoveFromCart'), 'error');
@@ -801,25 +800,20 @@ export const AppProvider = ({ children }) => {
         }
     };
 
-    const placeOrder = useCallback(() => {
-        showNotification(t('orderPlacedSuccess'), 'success');
-        setCart([]);
-    }, [showNotification, t]);
-
     // --- User Profile and Address Management ---
     const updateUserProfile = useCallback(async (updatedFields) => {
-        if (!currentUser) {
+        if (!currentUser || !currentUser._id) { 
             showNotification(t('pleaseLoginToUpdateProfile'), 'error');
-            throw new Error("User not logged in.");
+            throw new Error("User not logged in or user ID missing.");
         }
         const token = localStorage.getItem('shopkartToken');
         if (!token) {
             showNotification(t('authenticationRequired'), 'error');
-            throw new Error("Authentication token not found.");
+            throw new Error("Authentication token missing.");
         }
 
         try {
-            const response = await fetch(`${API_BASE_URL}/profile/${currentUser.id}`, {
+            const response = await fetch(`${API_BASE_URL}/profile/${currentUser._id}`, {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',
@@ -829,8 +823,8 @@ export const AppProvider = ({ children }) => {
             });
             const updatedUser = await response.json();
             if (response.ok) {
-                setCurrentUser(prev => ({ ...prev, ...updatedUser }));
-                localStorage.setItem('shopkartUser', JSON.stringify({ ...currentUser, ...updatedUser }));
+                setCurrentUser(prev => ({ ...prev, ...updatedUser, _id: prev._id || updatedUser._id || updatedUser.id }));
+                localStorage.setItem('shopkartUser', JSON.stringify({ ...currentUser, ...updatedUser, _id: currentUser._id || updatedUser._id || updatedUser.id }));
                 showNotification(updatedUser.message || t('profileUpdatedSuccessfully'), 'success');
                 return updatedUser;
             } else {
@@ -843,14 +837,18 @@ export const AppProvider = ({ children }) => {
         }
     }, [currentUser, showNotification, t, API_BASE_URL]);
 
-const addAddress = useCallback(async (addressData) => {
-        if (!currentUser) {
+    const addAddress = useCallback(async (addressData) => {
+        if (!currentUser || !currentUser._id) { 
             showNotification(t('pleaseLoginToAddAddress'), 'error');
-            throw new Error("User not logged in.");
+            throw new Error("User not logged in or user ID missing.");
         }
         const token = localStorage.getItem('shopkartToken');
+        if (!token) {
+            showNotification(t('authenticationRequired'), 'error');
+            throw new Error("Authentication token missing.");
+        }
         try {
-            const response = await fetch(`${API_BASE_URL}/profile/${currentUser.id}/addresses`, {
+            const response = await fetch(`${API_BASE_URL}/profile/${currentUser._id}/addresses`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -862,25 +860,17 @@ const addAddress = useCallback(async (addressData) => {
             const data = await response.json();
 
             if (!response.ok) {
-                // If the server returns an error, throw it
                 throw new Error(data.message || t('failedToAddAddress'));
             }
-            
-            const newAddress = data.address; // Extract the new address from the response
 
-            // THIS IS THE FIX:
-            // Update the global addresses state by adding the new one to the list.
+            const newAddress = data.address; 
             setAddresses(prevAddresses => [...prevAddresses, newAddress]);
-            
             showNotification(data.message || t('addressAddedSuccessfully'), 'success');
-            
-            // Return the newly created address object so the CheckoutPage can use it
             return newAddress;
 
         } catch (error) {
             console.error('Failed to add address:', error);
             showNotification(error.message || t('failedToAddAddressNetwork'), 'error');
-            // Re-throw the error so the component knows the submission failed
             throw error;
         }
     }, [currentUser, showNotification, t, API_BASE_URL]);
@@ -892,23 +882,29 @@ const addAddress = useCallback(async (addressData) => {
             return;
         }
         const token = localStorage.getItem('shopkartToken');
+        if (!token) {
+            showNotification(t('authenticationRequired'), 'error');
+            throw new Error("Authentication token missing.");
+        }
         try {
             const response = await fetch(`${API_BASE_URL}/products/add`, {
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${token}`,
                 },
-                body: formData,
+                body: formData, 
             });
 
             const newProductData = await response.json();
             if (response.ok) {
-                await fetchProducts();
+                await fetchProducts(); 
+                showNotification(newProductData.message || t('productAddedSuccessfully'), 'success');
             } else {
                 throw new Error(newProductData.message || t('failedToAddProduct'));
             }
         } catch (error) {
             console.error("Failed to add product:", error);
+            showNotification(error.message || t('failedToAddProductNetwork'), 'error');
             throw error;
         }
     }, [currentUser, fetchProducts, showNotification, t, API_BASE_URL]);
@@ -919,23 +915,29 @@ const addAddress = useCallback(async (addressData) => {
             return;
         }
         const token = localStorage.getItem('shopkartToken');
+        if (!token) {
+            showNotification(t('authenticationRequired'), 'error');
+            throw new Error("Authentication token missing.");
+        }
         try {
             const response = await fetch(`${API_BASE_URL}/products/update/${productId}`, {
                 method: 'PUT',
                 headers: {
                     'Authorization': `Bearer ${token}`,
                 },
-                body: formData,
+                body: formData, 
             });
 
             const updatedProductData = await response.json();
             if (response.ok) {
-                await fetchProducts();
+                await fetchProducts(); 
+                showNotification(updatedProductData.message || t('productUpdatedSuccessfully'), 'success');
             } else {
                 throw new Error(updatedProductData.message || t('failedToUpdateProduct'));
             }
         } catch (error) {
             console.error("Failed to update product:", error);
+            showNotification(error.message || t('failedToUpdateProductNetwork'), 'error');
             throw error;
         }
     }, [currentUser, fetchProducts, showNotification, t, API_BASE_URL]);
@@ -946,6 +948,10 @@ const addAddress = useCallback(async (addressData) => {
             throw new Error("Unauthorized");
         }
         const token = localStorage.getItem('shopkartToken');
+        if (!token) {
+            showNotification(t('authenticationRequired'), 'error');
+            throw new Error("Authentication token missing.");
+        }
         try {
             const response = await fetch(`${API_BASE_URL}/products/delete/${productId}`, {
                 method: 'DELETE',
@@ -959,7 +965,7 @@ const addAddress = useCallback(async (addressData) => {
                 throw new Error(errorData.message || t('failedToDeleteProductGeneric'));
             }
 
-            await fetchProducts();
+            await fetchProducts(); 
             showNotification(t('productDeletedSuccess'), 'success');
 
         } catch (error) {
@@ -983,7 +989,7 @@ const addAddress = useCallback(async (addressData) => {
         orders, isLoadingOrders, errorOrders,
         stock, isLoadingStock, errorStock,
         notification,
-        setLanguage, navigate, login, addProduct, register, logout, addToCart, updateQuantity, removeFromCart, placeOrder, updateUserProfile, addAddress, setSearchTerm,
+        setLanguage, navigate, login, addProduct, register, logout, addToCart, updateQuantity, removeFromCart, updateUserProfile, addAddress, setSearchTerm,
         deleteProduct,
         updateProduct,
         fetchProducts,
@@ -992,18 +998,17 @@ const addAddress = useCallback(async (addressData) => {
         fetchMyOrders,
         fetchStock,
         updateStock,
-        placeUpiOrder,
         showNotification,
         addStockItem,
-        placeCodOrder,
         fetchOrderById,
-        cancelOrder,
         updateOrderStatus,
         generateNewProductWithInitialStock,
         sendOtp,
         verifyOtp,
-        sendPasswordResetOtp, // Added for forgot password
-        resetPassword,        // Added for forgot password
+        sendPasswordResetOtp,
+        resetPassword,
+        createRazorpayOrder,
+        verifyRazorpayPayment,
     };
 
     return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
