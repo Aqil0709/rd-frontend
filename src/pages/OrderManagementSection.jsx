@@ -58,7 +58,7 @@ const OrderRow = ({ order, t }) => {
             <td className="px-6 py-4 whitespace-nowrap">
                 <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
                     order.paymentStatus === 'Paid' || order.paymentStatus === 'Succesfull' ? 'bg-green-100 text-green-800' :
-                    order.paymentStatus === 'Pending' || order.paymentStatus.includes('COD') ? 'bg-yellow-100 text-yellow-800' : // Adjusted for COD
+                    order.paymentStatus === 'Pending' || (typeof order.paymentStatus === 'string' && order.paymentStatus.includes('COD')) ? 'bg-yellow-100 text-yellow-800' : // Adjusted for COD
                     'bg-red-100 text-red-800'
                 }`}>
                     {order.paymentStatus}
@@ -102,30 +102,29 @@ const OrderManagementSection = () => {
 
     // Filter orders based on selected payment type and status
     const filteredOrders = orders.filter(order => {
+        // --- FIX: Add a defensive check to ensure order and its properties exist before filtering ---
+        if (!order) return false;
+
         // Payment type filter logic
         const matchesPaymentType = () => {
-            if (paymentTypeFilter === 'All') {
-                return true;
-            }
-            // Assuming 'UPI' and 'COD' are part of the paymentStatus string
+            if (paymentTypeFilter === 'All') return true;
+            // Ensure paymentStatus is a string before calling .includes()
+            const paymentStatus = order.paymentStatus || '';
             if (paymentTypeFilter === 'UPI') {
-                // Check if paymentStatus exists and does NOT include 'COD'
-                return order.paymentStatus && !order.paymentStatus.includes('COD');
+                return !paymentStatus.includes('COD');
             }
             if (paymentTypeFilter === 'COD') {
-                // Check if paymentStatus exists and DOES include 'COD'
-                return order.paymentStatus && order.paymentStatus.includes('COD');
+                return paymentStatus.includes('COD');
             }
             return true;
         };
 
         // Status filter logic
         const matchesStatus = () => {
-            if (statusFilter === 'All') {
-                return true;
-            }
-            // Ensure order.status exists before trimming and comparing
-            return order.status && order.status.trim() === statusFilter;
+            if (statusFilter === 'All') return true;
+            // Ensure status is a string before calling .trim()
+            const currentStatus = order.status || '';
+            return currentStatus.trim() === statusFilter;
         };
 
         return matchesPaymentType() && matchesStatus();
