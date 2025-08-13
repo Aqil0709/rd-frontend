@@ -6,7 +6,6 @@ const OrderRow = ({ order, t }) => {
     // Get the update function from the context
     const { updateOrderStatus, showNotification, fetchOrders } = useContext(AppContext);
     
-    // --- FINAL FIX: Trim whitespace from the initial status ---
     // This ensures that a value like 'Delivered ' from the DB is treated as 'Delivered'.
     const initialStatus = order.status ? order.status.trim() : '';
     const [selectedStatus, setSelectedStatus] = useState(initialStatus);
@@ -23,8 +22,8 @@ const OrderRow = ({ order, t }) => {
         }
         setIsUpdating(true);
         try {
-            // Call the update function from the context
-            await updateOrderStatus(order.id, selectedStatus);
+            // Use the correct ID property: order._id
+            await updateOrderStatus(order._id, selectedStatus);
             showNotification(t('statusUpdatedSuccess'), 'success');
             // Re-fetch all orders to ensure the list is up-to-date
             await fetchOrders(); 
@@ -37,13 +36,16 @@ const OrderRow = ({ order, t }) => {
         }
     };
 
+    // --- FIX: Parse the items_details string into an array ---
+    const items = JSON.parse(order.items_details || '[]');
+
     return (
-        <tr key={order.id} className="hover:bg-gray-50">
-            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">#{order.id}</td>
-            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{order.customerName || 'N/A'}</td>
-            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">₹{parseFloat(order.totalAmount).toLocaleString('en-IN')}</td>
+        <tr key={order._id} className="hover:bg-gray-50">
+            {/* --- FIX: Use correct property names from the backend model --- */}
+            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">#{order._id.slice(-6)}</td>
+            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{order.user_id?.name || 'N/A'}</td>
+            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">₹{parseFloat(order.total_amount).toLocaleString('en-IN')}</td>
             <td className="px-6 py-4 whitespace-nowrap">
-                {/* Status is now an editable dropdown */}
                 <select 
                     value={selectedStatus} 
                     onChange={(e) => setSelectedStatus(e.target.value)}
@@ -57,24 +59,23 @@ const OrderRow = ({ order, t }) => {
             </td>
             <td className="px-6 py-4 whitespace-nowrap">
                 <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                    order.paymentStatus === 'Paid' || order.paymentStatus === 'Succesfull' ? 'bg-green-100 text-green-800' :
-                    order.paymentStatus === 'Pending' || (typeof order.paymentStatus === 'string' && order.paymentStatus.includes('COD')) ? 'bg-yellow-100 text-yellow-800' : // Adjusted for COD
+                    order.payment_status === 'Paid' ? 'bg-green-100 text-green-800' :
+                    order.payment_status === 'Pending' ? 'bg-yellow-100 text-yellow-800' :
                     'bg-red-100 text-red-800'
                 }`}>
-                    {order.paymentStatus}
+                    {order.payment_status}
                 </span>
             </td>
             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                {new Date(order.orderDate).toLocaleDateString()}
+                {new Date(order.order_date).toLocaleDateString()}
             </td>
             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                {order.items && Array.isArray(order.items) ? (
-                    order.items.map((item, index) => (
+                {items && Array.isArray(items) ? (
+                    items.map((item, index) => (
                         <div key={index}>{item.productName} (x{item.quantity})</div>
                     ))
                 ) : 'N/A'}
             </td>
-            {/* New "Actions" column */}
             <td className="px-6 py-4 whitespace-nowrap text-sm">
                 <button 
                     onClick={handleStatusUpdate}
@@ -91,38 +92,31 @@ const OrderRow = ({ order, t }) => {
 
 const OrderManagementSection = () => {
     const { orders, isLoadingOrders, errorOrders, fetchOrders, t } = useContext(AppContext);
-    // State for payment type filter
-    const [paymentTypeFilter, setPaymentTypeFilter] = useState('All'); // 'All', 'UPI', 'COD'
-    // State for order status filter
-    const [statusFilter, setStatusFilter] = useState('All'); // 'All', 'Processing', 'Shipped', 'Delivered', 'Cancelled'
+    const [paymentTypeFilter, setPaymentTypeFilter] = useState('All');
+    const [statusFilter, setStatusFilter] = useState('All');
 
     useEffect(() => {
         fetchOrders();
     }, [fetchOrders]);
 
-    // Filter orders based on selected payment type and status
     const filteredOrders = orders.filter(order => {
-        // --- FIX: Add a defensive check to ensure order and its properties exist before filtering ---
         if (!order) return false;
 
-        // Payment type filter logic
+        // --- FIX: Use correct property name 'payment_method' ---
         const matchesPaymentType = () => {
             if (paymentTypeFilter === 'All') return true;
-            // Ensure paymentStatus is a string before calling .includes()
-            const paymentStatus = order.paymentStatus || '';
+            const paymentMethod = order.payment_method || '';
             if (paymentTypeFilter === 'UPI') {
-                return !paymentStatus.includes('COD');
+                return paymentMethod === 'Razorpay'; // Assuming Razorpay is UPI
             }
             if (paymentTypeFilter === 'COD') {
-                return paymentStatus.includes('COD');
+                return paymentMethod === 'COD';
             }
             return true;
         };
 
-        // Status filter logic
         const matchesStatus = () => {
             if (statusFilter === 'All') return true;
-            // Ensure status is a string before calling .trim()
             const currentStatus = order.status || '';
             return currentStatus.trim() === statusFilter;
         };
@@ -165,7 +159,7 @@ const OrderManagementSection = () => {
                         className="p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
                     >
                         <option value="All">{t('All')}</option>
-                        <option value="UPI">{t('UPI')}</option>
+                        <option value="UPI">{t('Online')}</option> {/* Changed to Online for clarity */}
                         <option value="COD">{t('COD')}</option>
                     </select>
                 </div>
@@ -204,14 +198,13 @@ const OrderManagementSection = () => {
                                 <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">{t('paymentStatus')}</th>
                                 <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">{t('orderDate')}</th>
                                 <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">{t('items')}</th>
-                                {/* Added Actions header */}
                                 <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">{t('actions')}</th>
                             </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
                             {filteredOrders.map(order => (
-                                // Render the new OrderRow component for each order
-                                <OrderRow key={order.id} order={order} t={t} />
+                                // --- FIX: Use order._id for the key ---
+                                <OrderRow key={order._id} order={order} t={t} />
                             ))}
                         </tbody>
                     </table>
