@@ -8,8 +8,8 @@ const AuthPage = ({ view }) => {
     const { 
         login, register, navigate, authError, authLoading, t, 
         sendOtp, verifyOtp, 
-        sendPasswordResetOtp, // New function expected from context
-        resetPassword        // New function expected from context
+        sendPasswordResetOtp,
+        resetPassword
     } = useContext(AppContext);
 
     // --- STATE MANAGEMENT ---
@@ -21,6 +21,9 @@ const AuthPage = ({ view }) => {
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
     const [otp, setOtp] = useState('');
+    
+    // --- NEW ---: State for the age confirmation checkbox
+    const [isAgeConfirmed, setIsAgeConfirmed] = useState(false);
 
     // Error and message states
     const [formError, setFormError] = useState(null);
@@ -45,6 +48,7 @@ const AuthPage = ({ view }) => {
         setShowOtpInput(false);
         setShowResetPasswordFields(false);
         setOtpSessionId(null);
+        setIsAgeConfirmed(false); // --- MODIFIED ---: Reset age confirmation on mode change
     }, [view]);
 
     // --- HANDLER FUNCTIONS ---
@@ -98,9 +102,7 @@ const AuthPage = ({ view }) => {
     const handleVerifyRegistrationOtp = async () => {
         const response = await verifyOtp(mobileNumber, otp, otpSessionId);
         if (response.success) {
-            // OTP is good, now create the account
             await register({ mobileNumber, password });
-            // AppContext will handle successful navigation
         } else {
             setFormError(response.message || t('invalidOtp'));
         }
@@ -109,7 +111,6 @@ const AuthPage = ({ view }) => {
     // --- Forgot Password Handlers ---
 
     const handleSendResetOtp = async () => {
-        // Assumes sendPasswordResetOtp exists in context
         const response = await sendPasswordResetOtp(mobileNumber);
         if (response.success) {
             setOtpSessionId(response.sessionId);
@@ -121,12 +122,10 @@ const AuthPage = ({ view }) => {
     };
 
     const handleVerifyResetOtp = async () => {
-        // Here, we just verify the OTP. We don't have a dedicated verify function for reset,
-        // so we can reuse `verifyOtp` if the backend logic is the same.
         const response = await verifyOtp(mobileNumber, otp, otpSessionId);
         if (response.success) {
             setShowOtpInput(false);
-            setShowResetPasswordFields(true); // Show the new password fields
+            setShowResetPasswordFields(true);
             setSuccessMessage(t('otpVerifiedResetNow'));
         } else {
             setFormError(response.message || t('invalidOtp'));
@@ -134,11 +133,10 @@ const AuthPage = ({ view }) => {
     };
 
     const handleResetPassword = async () => {
-        // Assumes resetPassword exists in context
         const response = await resetPassword({ mobileNumber, password, otpSessionId });
         if (response.success) {
             setSuccessMessage(t('passwordResetSuccess'));
-            setTimeout(() => setMode('login'), 2000); // Redirect to login after 2s
+            setTimeout(() => setMode('login'), 2000);
         } else {
             setFormError(response.message || t('passwordResetFailed'));
         }
@@ -272,12 +270,33 @@ const AuthPage = ({ view }) => {
                         {formError && <p className="text-red-600 text-sm text-center font-medium">{formError}</p>}
                         {authError && <p className="text-red-600 text-sm text-center font-medium">{authError}</p>}
                         {successMessage && <p className="text-green-600 text-sm text-center font-medium">{successMessage}</p>}
+                        
+                        {/* --- NEW ---: Age Confirmation Checkbox --- */}
+                        {(mode === 'login' || mode === 'register') && (
+                            <div className="flex items-center space-x-2">
+                                <input
+                                    type="checkbox"
+                                    id="ageConfirm"
+                                    checked={isAgeConfirmed}
+                                    onChange={(e) => setIsAgeConfirmed(e.target.checked)}
+                                    className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                                />
+                                <label htmlFor="ageConfirm" className="text-sm text-gray-600">
+                                    {t('I certify that I am 18 years of age or older.')}
+                                </label>
+                            </div>
+                        )}
 
                         {/* --- Submit Button --- */}
                         <div>
                             <button type="submit"
                                 className="w-full py-3 px-4 bg-orange-500 text-white font-semibold rounded-md shadow-md hover:bg-orange-600 transition-colors duration-200 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed text-lg"
-                                disabled={loading || authLoading}>
+                                // --- MODIFIED ---: Add age confirmation to the disabled logic
+                                disabled={
+                                    loading || 
+                                    authLoading || 
+                                    ((mode === 'login' || mode === 'register') && !isAgeConfirmed)
+                                }>
                                 {loading || authLoading ? <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-white mr-3"></div> : getButtonIcon()}
                                 {getButtonText()}
                             </button>
