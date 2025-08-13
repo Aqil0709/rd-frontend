@@ -25,7 +25,7 @@ const Header = () => {
                     {/* Brand Logo and Name */}
                     <div className="flex items-center flex-shrink-0">
                         <h1 onClick={() => navigate('home')} className="text-xl md:text-2xl font-bold text-blue-700 cursor-pointer flex items-center transition-colors duration-200 hover:text-blue-900">
-                            RD Panshop 
+                            RD General Store
                             
                         </h1>
                     </div>

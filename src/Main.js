@@ -27,8 +27,7 @@ const Main = () => {
         return <HomePage />;
       case 'products':
         return <ProductsPage />;
-      case 'productDetail':
-        return <ProductDetailPage />;
+   
       case 'cart':
         return <CartPage />;
       case 'checkout':

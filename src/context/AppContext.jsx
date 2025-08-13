@@ -1,4 +1,6 @@
 /* global __app_id */
+// --- THIS IS THE COMPLETE AppContext.jsx FILE ---
+
 import React, { useState, createContext, useEffect, useCallback } from 'react';
 import { locales } from '../translations/locales'; // Ensure this path is correct
 
@@ -8,9 +10,16 @@ export const AppProvider = ({ children }) => {
     const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
 
     // --- DYNAMIC API URLS ---
+<<<<<<< HEAD
     const API_BASE_URL = process.env.NODE_ENV === 'production'
         ? 'https://rd-backend-0e7p.onrender.com/api'
         : 'http://localhost:5002/api';
+=======
+    // This will use your live Render URL in production and localhost for development
+    const API_BASE_URL = process.env.NODE_ENV === 'production'
+        ? 'https://rd-backend-0e7p.onrender.com'
+        : 'http://localhost:5002';
+>>>>>>> a7611f463a4872b586f5015bab98bf978eb274a1
 
     // --- State Variables ---
     const [products, setProducts] = useState([]);
@@ -62,6 +71,7 @@ export const AppProvider = ({ children }) => {
 
     // --- Razorpay Order Functions ---
     const createRazorpayOrder = useCallback(async (deliveryAddressId, totalAmount) => {
+<<<<<<< HEAD
         if (!currentUser || !currentUser._id) { // Ensure _id is present
             showNotification(t('pleaseLoginToPlaceOrder'), 'error');
             throw new Error("User not logged in or user ID missing.");
@@ -74,6 +84,14 @@ export const AppProvider = ({ children }) => {
         try {
             console.log("--- FRONTEND LOG: Sending this cart to backend ---", JSON.stringify(cart, null, 2));
             console.log("createRazorpayOrder: Sending request for user", currentUser._id);
+=======
+        if (!currentUser) {
+            showNotification(t('pleaseLoginToPlaceOrder'), 'error');
+            throw new Error("User not logged in.");
+        }
+        const token = localStorage.getItem('shopkartToken');
+        try {
+>>>>>>> a7611f463a4872b586f5015bab98bf978eb274a1
             const response = await fetch(`${API_BASE_URL}/payment/create-order`, {
                 method: 'POST',
                 headers: {
@@ -82,11 +100,18 @@ export const AppProvider = ({ children }) => {
                 },
                 body: JSON.stringify({
                     amount: totalAmount,
+<<<<<<< HEAD
                     deliveryAddressId: deliveryAddressId,
                     cart: cart.map(item => ({
                         // --- THIS IS THE FIX ---
                         // Send the correct product ID to the backend
                         productId: item.productId,
+=======
+                    receipt: `receipt_order_${new Date().getTime()}`,
+                    deliveryAddressId: deliveryAddressId, // THIS LINE IS CRUCIAL
+                    cart: cart.map(item => ({
+                        productId: item.id,
+>>>>>>> a7611f463a4872b586f5015bab98bf978eb274a1
                         quantity: item.quantity,
                         price: item.price,
                         originalPrice: item.originalPrice || item.price,
@@ -108,10 +133,13 @@ export const AppProvider = ({ children }) => {
 
     const verifyRazorpayPayment = useCallback(async (verificationData) => {
         const token = localStorage.getItem('shopkartToken');
+<<<<<<< HEAD
         if (!token) {
             showNotification(t('authenticationRequired'), 'error');
             throw new Error("Authentication token missing.");
         }
+=======
+>>>>>>> a7611f463a4872b586f5015bab98bf978eb274a1
         try {
             const response = await fetch(`${API_BASE_URL}/payment/verify-payment`, {
                 method: 'POST',
@@ -131,7 +159,11 @@ export const AppProvider = ({ children }) => {
             showNotification(error.message || 'Payment verification failed', 'error');
             throw error;
         }
+<<<<<<< HEAD
     }, [showNotification, API_BASE_URL, t]);
+=======
+    }, [showNotification, API_BASE_URL]);
+>>>>>>> a7611f463a4872b586f5015bab98bf978eb274a1
 
     // --- Fetch a single order by ID ---
     const fetchOrderById = useCallback(async (orderId) => {
@@ -609,7 +641,11 @@ export const AppProvider = ({ children }) => {
                 setAuthError(data.message || t('loginFailed'));
                 return;
             }
+<<<<<<< HEAD
             const user = { id: data.id, _id: data._id || data.id, name: data.name, mobileNumber: data.mobileNumber, role: data.role };
+=======
+            const user = { id: data.id, name: data.name, mobileNumber: data.mobileNumber, role: data.role };
+>>>>>>> a7611f463a4872b586f5015bab98bf978eb274a1
             setCurrentUser(user);
             localStorage.setItem('shopkartUser', JSON.stringify(user));
             localStorage.setItem('shopkartToken', data.token);
@@ -838,7 +874,11 @@ export const AppProvider = ({ children }) => {
     }, [currentUser, showNotification, t, API_BASE_URL]);
 
     const addAddress = useCallback(async (addressData) => {
+<<<<<<< HEAD
         if (!currentUser || !currentUser._id) { 
+=======
+        if (!currentUser) {
+>>>>>>> a7611f463a4872b586f5015bab98bf978eb274a1
             showNotification(t('pleaseLoginToAddAddress'), 'error');
             throw new Error("User not logged in or user ID missing.");
         }
@@ -862,8 +902,13 @@ export const AppProvider = ({ children }) => {
             if (!response.ok) {
                 throw new Error(data.message || t('failedToAddAddress'));
             }
+<<<<<<< HEAD
 
             const newAddress = data.address; 
+=======
+            
+            const newAddress = data.address;
+>>>>>>> a7611f463a4872b586f5015bab98bf978eb274a1
             setAddresses(prevAddresses => [...prevAddresses, newAddress]);
             showNotification(data.message || t('addressAddedSuccessfully'), 'success');
             return newAddress;
@@ -1012,4 +1057,4 @@ export const AppProvider = ({ children }) => {
     };
 
     return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
-};
+}

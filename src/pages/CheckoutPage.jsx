@@ -14,7 +14,10 @@ const useRazorpayScript = () => {
         // Check if the script is already present to prevent multiple loads
         if (document.querySelector('script[src="https://checkout.razorpay.com/v1/checkout.js"]')) {
             setIsScriptLoaded(true);
+<<<<<<< HEAD
             console.log("Razorpay script already loaded.");
+=======
+>>>>>>> a7611f463a4872b586f5015bab98bf978eb274a1
             return;
         }
 
@@ -25,12 +28,19 @@ const useRazorpayScript = () => {
         // Set the state to true once the script has successfully loaded
         script.onload = () => {
             setIsScriptLoaded(true);
+<<<<<<< HEAD
             console.log("Razorpay script loaded successfully.");
+=======
+>>>>>>> a7611f463a4872b586f5015bab98bf978eb274a1
         };
 
         // Handle errors in case the script fails to load
         script.onerror = () => {
+<<<<<<< HEAD
             console.error("Razorpay script failed to load. Please check your network connection or ad-blocker.");
+=======
+            console.error("Razorpay script failed to load.");
+>>>>>>> a7611f463a4872b586f5015bab98bf978eb274a1
             setIsScriptLoaded(false);
         };
 
@@ -40,7 +50,10 @@ const useRazorpayScript = () => {
             // Clean up the script when the component unmounts
             if (document.body.contains(script)) {
                 document.body.removeChild(script);
+<<<<<<< HEAD
                 console.log("Razorpay script removed on unmount.");
+=======
+>>>>>>> a7611f463a4872b586f5015bab98bf978eb274a1
             }
         };
     }, []);
@@ -128,6 +141,7 @@ const CheckoutPage = () => {
         e.preventDefault();
         if (!validateAddressForm()) {
             showNotification(t('pleaseCorrectAddressErrors'), 'error');
+<<<<<<< HEAD
             return;
         }
         setIsSubmitting(true);
@@ -185,11 +199,59 @@ const CheckoutPage = () => {
         }
         // Use _id consistently here
         if (!deliveryAddress || !deliveryAddress._id) {
+=======
+            return;
+        }
+        setIsSubmitting(true);
+        try {
+            const newlyAddedAddress = await addAddress(newAddressData);
+            if (newlyAddedAddress && newlyAddedAddress.id) {
+                setDeliveryAddress(newlyAddedAddress);
+                setSelectedAddressId(newlyAddedAddress.id);
+                setShowAddressForm(false);
+                setNewAddressData({ name: currentUser?.name || '', mobile: '', pincode: '', locality: '', address: '', city: '', state: '', addressType: 'Home' });
+                setActiveStep(2);
+                showNotification(t('addressAddedSuccessfully'), 'success');
+            }
+        } catch (error) {
+            showNotification(error.message || t('failedToAddAddress'), 'error');
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    const handleAddressSelection = (e) => {
+        const selectedId = e.target.value;
+        setSelectedAddressId(selectedId);
+        if (selectedId === 'new') {
+            setShowAddressForm(true);
+            setDeliveryAddress(null);
+            setActiveStep(1);
+        } else {
+            setShowAddressForm(false);
+            const selectedAddr = addresses.find(addr => String(addr.id) === selectedId);
+            setDeliveryAddress(selectedAddr);
+            if (selectedAddr) {
+                setActiveStep(2);
+            }
+        }
+    };
+
+    // --- Razorpay Payment Handler ---
+    const handleSubmitPayment = async () => {
+        // First, check if the Razorpay script has loaded and if an address is selected.
+        if (!isRazorpayScriptLoaded) {
+            showNotification(t('paymentGatewayNotLoaded'), 'error');
+            return;
+        }
+        if (!deliveryAddress || !deliveryAddress.id) {
+>>>>>>> a7611f463a4872b586f5015bab98bf978eb274a1
             showNotification(t('pleaseSelectOrAddAddress'), 'error');
             return;
         }
 
         setIsSubmitting(true);
+<<<<<<< HEAD
 
         let orderData = null; // Initialize orderData outside try block
 
@@ -206,6 +268,13 @@ const CheckoutPage = () => {
                 console.error(errorMessage, orderData); // Log orderData for inspection
                 setIsSubmitting(false); // Stop submitting state here if data is bad
                 return; // Stop execution if orderData is invalid
+=======
+
+        try {
+            const orderData = await createRazorpayOrder(deliveryAddress.id, total);
+            if (!orderData || !orderData.order_id || !orderData.amount) {
+                throw new Error(t('failedToCreateRazorpayOrder'));
+>>>>>>> a7611f463a4872b586f5015bab98bf978eb274a1
             }
 
             const options = {
@@ -222,19 +291,30 @@ const CheckoutPage = () => {
                             razorpay_order_id: response.razorpay_order_id,
                             razorpay_signature: response.razorpay_signature,
                         };
+<<<<<<< HEAD
                         console.log("Verifying Razorpay payment with data:", verificationData);
                         const result = await verifyRazorpayPayment(verificationData);
                         console.log("Payment verification result:", result);
+=======
+                        const result = await verifyRazorpayPayment(verificationData);
+>>>>>>> a7611f463a4872b586f5015bab98bf978eb274a1
                         if (result.status === 'success') {
                             showNotification(t('paymentSuccessful'), 'success');
                             setCart([]);
                             navigate('orderConfirmation', { orderId: response.razorpay_order_id, status: 'PAID' });
                         } else {
+<<<<<<< HEAD
                             throw new Error(t('paymentVerificationFailed') + ": " + (result.message || 'Unknown error'));
                         }
                     } catch (error) {
                         showNotification(error.message || t('paymentVerificationFailed'), 'error');
                         console.error("Payment verification failed:", error);
+=======
+                            throw new Error(t('paymentVerificationFailed'));
+                        }
+                    } catch (error) {
+                           showNotification(error.message || t('paymentVerificationFailed'), 'error');
+>>>>>>> a7611f463a4872b586f5015bab98bf978eb274a1
                     }
                 },
                 prefill: {
@@ -251,11 +331,15 @@ const CheckoutPage = () => {
                 modal: {
                     ondismiss: function() {
                         showNotification(t('paymentCancelled'), 'info');
+<<<<<<< HEAD
                         console.log("Razorpay modal dismissed by user.");
+=======
+>>>>>>> a7611f463a4872b586f5015bab98bf978eb274a1
                     }
                 }
             };
 
+<<<<<<< HEAD
             console.log("Initializing Razorpay with options:", options);
             const rzp = new window.Razorpay(options);
             rzp.open();
@@ -271,6 +355,17 @@ const CheckoutPage = () => {
             // as well as any other unexpected errors during payment initiation.
             showNotification(error.message || t('paymentInitiationFailed'), 'error');
             console.error("Error during payment initiation or order creation:", error);
+=======
+            const rzp = new window.Razorpay(options);
+            rzp.open();
+
+            rzp.on('payment.failed', function (response){
+                showNotification(`${t('paymentFailed')}: ${response.error.description}`, 'error');
+            });
+
+        } catch (error) {
+            showNotification(error.message || t('paymentInitiationFailed'), 'error');
+>>>>>>> a7611f463a4872b586f5015bab98bf978eb274a1
         } finally {
             // Ensure isSubmitting is reset even if there's a problem
             setIsSubmitting(false);
@@ -459,7 +554,11 @@ const CheckoutPage = () => {
                                     </button>
                                     {!isRazorpayScriptLoaded && (
                                         <div className="mt-4 text-center text-gray-500 text-sm">
+<<<<<<< HEAD
                                             {t('Please wait, loading payment gateway...')} {/* Clarified message */}
+=======
+                                            {t('Loading payment gateway...')}
+>>>>>>> a7611f463a4872b586f5015bab98bf978eb274a1
                                         </div>
                                     )}
                                 </div>
@@ -501,5 +600,9 @@ const CheckoutPage = () => {
     );
 };
 
+<<<<<<< HEAD
+=======
+// --- THIS IS THE CRUCIAL FIX ---
+>>>>>>> a7611f463a4872b586f5015bab98bf978eb274a1
 // Ensure the component is exported by default
 export default CheckoutPage;
