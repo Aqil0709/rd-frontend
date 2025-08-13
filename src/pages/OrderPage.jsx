@@ -8,7 +8,6 @@ const OrderPage = () => {
     const [filterStatus, setFilterStatus] = useState('All');
 
     useEffect(() => {
-        console.log('Orders from backend:', orders);
         fetchMyOrders();
     }, [fetchMyOrders]);
 
@@ -33,14 +32,18 @@ const OrderPage = () => {
     };
 
     const filteredOrders = orders.filter(order => {
-        const orderIdString = String(order.id);
-        const matchesSearch = orderIdString.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                                     // Ensure order.items is an array before calling .some()
-                                     (Array.isArray(order.items) && order.items.some(item =>
-                                         item.productName && item.productName.toLowerCase().includes(searchTerm.toLowerCase())
-                                     ));
+        // --- FIX: Add defensive checks for order and its properties ---
+        if (!order || !order._id) return false;
+
+        // --- FIX: Parse items_details from a string to an array ---
+        const items = JSON.parse(order.items_details || '[]');
         
-        // --- CORRECTED: Made the status comparison case-insensitive ---
+        const orderIdString = String(order._id);
+        const matchesSearch = orderIdString.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                              (Array.isArray(items) && items.some(item =>
+                                  item.productName && item.productName.toLowerCase().includes(searchTerm.toLowerCase())
+                              ));
+        
         const matchesStatus = filterStatus === 'All' || (order.status && order.status.trim().toLowerCase() === filterStatus.toLowerCase());
         
         return matchesSearch && matchesStatus;
@@ -88,7 +91,6 @@ const OrderPage = () => {
             <div className="container mx-auto px-4">
                 <h1 className="text-3xl font-bold text-gray-800 mb-8">{t('myOrders')}</h1>
 
-                {/* --- UPDATED: Search and Filter Section for better responsiveness --- */}
                 <div className="bg-white p-6 rounded-lg shadow-md mb-8 flex flex-col sm:flex-row sm:items-center space-y-4 sm:space-y-0 sm:space-x-4">
                     <div className="relative flex-grow">
                         <input
@@ -113,97 +115,93 @@ const OrderPage = () => {
                     </select>
                 </div>
 
-                {/* Orders List */}
                 <div className="space-y-6">
                     {filteredOrders.length > 0 ? (
-                        filteredOrders.map(order => (
-                            <div key={order.id} className="bg-white rounded-lg shadow-md overflow-hidden border border-gray-200">
-                                {/* Order Header - Summary */}
-                                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center p-4 border-b border-gray-200 bg-gray-50">
-                                    <div className="mb-2 sm:mb-0">
-                                        <p className="text-sm text-gray-600">
-                                            {t('orderId')}: <span className="font-semibold text-gray-800">#{order.id}</span>
-                                        </p>
-                                        <p className="text-sm text-gray-600 flex items-center mt-1">
-                                            <Calendar className="h-4 w-4 mr-1 text-gray-500" />
-                                            {t('orderDate')}: <span className="font-semibold text-gray-800 ml-1">
-                                                {new Date(order.orderDate).toLocaleDateString('en-IN', {
-                                                    year: 'numeric', month: 'short', day: 'numeric'
-                                                })}
+                        filteredOrders.map(order => {
+                            // --- FIX: Parse items_details here to use in the component ---
+                            const items = JSON.parse(order.items_details || '[]');
+                            return (
+                                <div key={order._id} className="bg-white rounded-lg shadow-md overflow-hidden border border-gray-200">
+                                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center p-4 border-b border-gray-200 bg-gray-50">
+                                        <div className="mb-2 sm:mb-0">
+                                            {/* --- FIX: Use correct property names --- */}
+                                            <p className="text-sm text-gray-600">
+                                                {t('orderId')}: <span className="font-semibold text-gray-800">#{order._id.slice(-6)}</span>
+                                            </p>
+                                            <p className="text-sm text-gray-600 flex items-center mt-1">
+                                                <Calendar className="h-4 w-4 mr-1 text-gray-500" />
+                                                {t('orderDate')}: <span className="font-semibold text-gray-800 ml-1">
+                                                    {new Date(order.order_date).toLocaleDateString('en-IN', {
+                                                        year: 'numeric', month: 'short', day: 'numeric'
+                                                    })}
+                                                </span>
+                                            </p>
+                                        </div>
+                                        <div className="flex items-center mt-2 sm:mt-0">
+                                            <span className={`px-3 py-1 rounded-full text-xs font-semibold flex items-center ${getStatusColor(order.status)}`}>
+                                                {getStatusIcon(order.status)} {t(order.status.toLowerCase())}
                                             </span>
-                                        </p>
+                                            <p className="text-lg font-bold text-gray-900 ml-4 flex items-center">
+                                                <DollarSign className="h-5 w-5 mr-1 text-green-700" />
+                                                {t('total')}: ₹{Number(order.total_amount).toFixed(2)}
+                                            </p>
+                                        </div>
                                     </div>
-                                    <div className="flex items-center mt-2 sm:mt-0">
-                                        <span className={`px-3 py-1 rounded-full text-xs font-semibold flex items-center ${getStatusColor(order.status)}`}>
-                                            {getStatusIcon(order.status)} {t(order.status.toLowerCase())}
-                                        </span>
-                                        <p className="text-lg font-bold text-gray-900 ml-4 flex items-center">
-                                            <div className="h-5 w-5 mr-1 text-green-700" />
-                                            {t('total')}: ₹{Number(order.total).toFixed(2)}
-                                        </p>
-                                    </div>
-                                </div>
 
-                                {/* Order Items Display */}
-                                <div className="p-4">
-                                    {/* Display up to 3 items directly, then a "View All Items" link */}
-                                    {Array.isArray(order.items) && order.items.slice(0, 3).map(item => (
-                                        <div key={item.productId} className="flex items-center py-3 border-b border-gray-100 last:border-b-0">
-                                            <img
-                                                src={item.image || `https://placehold.co/80x80/cccccc/ffffff?text=${item.productName ? item.productName.substring(0, 5) : 'Img'}`}
-                                                alt={item.productName}
-                                                className="w-20 h-20 object-contain rounded-md mr-4"
-                                                onError={(e) => { e.target.onerror = null; e.target.src='https://placehold.co/80x80/cccccc/ffffff?text=Image+Not+Found'; }}
-                                            />
-                                            <div className="flex-grow">
-                                                <p className="text-base font-semibold text-gray-800">{item.productName}</p>
-                                                <p className="text-sm text-gray-600">{t('quantity')}: {item.quantity}</p>
-                                                <p className="text-sm font-bold text-gray-900">₹{(Number(item.price) * item.quantity).toFixed(2)}</p>
+                                    <div className="p-4">
+                                        {items.slice(0, 3).map(item => (
+                                            <div key={item.productId} className="flex items-center py-3 border-b border-gray-100 last:border-b-0">
+                                                <img
+                                                    src={item.image || `https://placehold.co/80x80/cccccc/ffffff?text=${item.productName ? item.productName.substring(0, 5) : 'Img'}`}
+                                                    alt={item.productName}
+                                                    className="w-20 h-20 object-contain rounded-md mr-4"
+                                                    onError={(e) => { e.target.onerror = null; e.target.src='https://placehold.co/80x80/cccccc/ffffff?text=Image+Not+Found'; }}
+                                                />
+                                                <div className="flex-grow">
+                                                    <p className="text-base font-semibold text-gray-800">{item.productName}</p>
+                                                    <p className="text-sm text-gray-600">{t('quantity')}: {item.quantity}</p>
+                                                    <p className="text-sm font-bold text-gray-900">₹{(Number(item.price) * item.quantity).toFixed(2)}</p>
+                                                </div>
+                                                <button
+                                                    onClick={() => navigate('productDetail', { id: item.productId })}
+                                                    className="text-blue-600 hover:underline text-sm font-medium ml-auto px-3 py-1 rounded-md hover:bg-blue-50 transition-colors"
+                                                >
+                                                    {t('viewProduct')}
+                                                </button>
                                             </div>
-                                            {/* Optional: View Product Button */}
-                                            <button
-                                                onClick={() => navigate('productDetail', { id: item.productId })}
-                                                className="text-blue-600 hover:underline text-sm font-medium ml-auto px-3 py-1 rounded-md hover:bg-blue-50 transition-colors"
-                                            >
-                                                
-                                            </button>
-                                        </div>
-                                    ))}
-                                    {Array.isArray(order.items) && order.items.length > 3 && (
-                                        <div className="text-center pt-4">
-                                            <button
-                                                onClick={() => navigate('orderDetail', order)}
-                                                className="text-blue-600 font-semibold hover:underline"
-                                            >
-                                                {t('viewAllItems', { count: order.items.length })}
-                                            </button>
-                                        </div>
-                                    )}
-                                </div>
+                                        ))}
+                                        {items.length > 3 && (
+                                            <div className="text-center pt-4">
+                                                <button
+                                                    onClick={() => navigate('orderDetail', order)}
+                                                    className="text-blue-600 font-semibold hover:underline"
+                                                >
+                                                    {t('viewAllItems', { count: items.length })}
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
 
-                                {/* View Order Details Button (at the bottom of the card) */}
-                                <div className="p-4 border-t border-gray-200 bg-gray-50 flex justify-end items-center space-x-4">
-                                    {/* --- NEW: Share Your Review Button --- */}
-                                    {order.status === 'Delivered' && order.paymentStatus === 'Paid' && (
+                                    <div className="p-4 border-t border-gray-200 bg-gray-50 flex justify-end items-center space-x-4">
+                                        {order.status === 'Delivered' && order.payment_status === 'Paid' && (
+                                            <button
+                                                onClick={() => navigate('productReview', { product: items[0] })}
+                                                className="px-6 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors font-semibold shadow-sm flex items-center"
+                                            >
+                                                <Star className="h-4 w-4 mr-2" />
+                                                {t('shareYourReview')}
+                                            </button>
+                                        )}
                                         <button
-                                            // For now, this navigates to a placeholder. You would create a 'productReview' page.
-                                            // It passes the first product in the order to the review page.
-                                            onClick={() => navigate('productReview', { product: order.items[0] })}
-                                            className="px-6 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors font-semibold shadow-sm flex items-center"
+                                            onClick={() => navigate('orderDetail', order)}
+                                            className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors font-semibold shadow-sm"
                                         >
-                                            <Star className="h-4 w-4 mr-2" />
-                                            {t('shareYourReview')}
+                                            {t('View Details')}
                                         </button>
-                                    )}
-                                    <button
-                                        onClick={() => navigate('orderDetail', order)} // This correctly passes the 'order' object
-                                        className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors font-semibold shadow-sm"
-                                    >
-                                        {t('View Details')}
-                                    </button>
+                                    </div>
                                 </div>
-                            </div>
-                        ))
+                            )
+                        })
                     ) : (
                         <div className="text-center py-12 bg-white rounded-lg shadow-md">
                             <p className="text-lg text-gray-600">{t('noMatchingOrders')}</p>
