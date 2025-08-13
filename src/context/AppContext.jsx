@@ -85,7 +85,7 @@ export const AppProvider = ({ children }) => {
                     amount: totalAmount,
                     deliveryAddressId: deliveryAddressId,
                     cart: cart.map(item => ({
-                        productId: item.productId, // Use the correct product ID
+                        productId: item.productId,
                         quantity: item.quantity,
                         price: item.price,
                         originalPrice: item.originalPrice || item.price,
@@ -760,7 +760,8 @@ export const AppProvider = ({ children }) => {
             });
             const updatedCart = await response.json();
             if (response.ok) {
-                setCart(updatedCart.cartItems || []);
+                // --- FIX: Handle both array and object responses from backend ---
+                setCart(updatedCart.cartItems || updatedCart || []);
                 showNotification(t('cartUpdated'), 'success');
             } else {
                 showNotification(updatedCart.message || t('failedToUpdateCart'), 'error');
@@ -788,7 +789,8 @@ export const AppProvider = ({ children }) => {
             });
             const updatedCart = await response.json();
             if (response.ok) {
-                setCart(updatedCart.cartItems || []);
+                // --- FIX: Handle both array and object responses from backend ---
+                setCart(updatedCart.cartItems || updatedCart || []);
                 showNotification(t('productRemovedFromCart'), 'success');
             } else {
                 showNotification(updatedCart.message || t('failedToRemoveFromCart'), 'error');
