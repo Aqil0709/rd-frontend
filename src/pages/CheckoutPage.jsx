@@ -74,9 +74,11 @@ const CheckoutPage = () => {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [addressFormErrors, setAddressFormErrors] = useState({});
 
-    // Effect to set default address or show the form if no addresses exist
+    // --- THIS IS THE FIX ---
+    // This effect now correctly sets the initial default address without interfering with user actions.
     useEffect(() => {
-        if (addresses && addresses.length > 0 && !deliveryAddress) {
+        // Only set a default address if one hasn't been selected yet
+        if (addresses && addresses.length > 0 && !selectedAddressId) {
             const defaultAddress = addresses[0];
             setSelectedAddressId(defaultAddress._id);
             setDeliveryAddress(defaultAddress);
@@ -85,10 +87,11 @@ const CheckoutPage = () => {
                 setActiveStep(2);
             }
         } else if (!addresses || addresses.length === 0) {
+            // If there are no addresses, force the form to show
             setShowAddressForm(true);
             setSelectedAddressId('new');
         }
-    }, [addresses, deliveryAddress, cart.length]);
+    }, [addresses, selectedAddressId, cart.length]); // Dependency changed to selectedAddressId
 
     // Effect to pre-fill user's name in the address form
     useEffect(() => {
@@ -132,13 +135,13 @@ const CheckoutPage = () => {
         setIsSubmitting(true);
         try {
             const newlyAddedAddress = await addAddress(newAddressData);
-            if (newlyAddedAddress && newlyAddedAddress._id) { // Use _id here
+            if (newlyAddedAddress && newlyAddedAddress._id) {
                 setDeliveryAddress(newlyAddedAddress);
-                setSelectedAddressId(newlyAddedAddress._id); // Use _id here
+                setSelectedAddressId(newlyAddedAddress._id);
                 setShowAddressForm(false);
                 setNewAddressData({ name: currentUser?.name || '', mobile: '', pincode: '', locality: '', address: '', city: '', state: '', addressType: 'Home' });
                 showNotification(t('addressAddedSuccessfully'), 'success');
-                setActiveStep(2); // Move to next step after successful address add
+                setActiveStep(2);
             }
         } catch (error) {
             showNotification(error.message || t('failedToAddAddress'), 'error');
@@ -166,18 +169,12 @@ const CheckoutPage = () => {
 
     // --- Razorpay Payment Handler ---
     const handleSubmitPayment = async () => {
-        console.log("Attempting to handle payment...");
-        console.log("isRazorpayScriptLoaded:", isRazorpayScriptLoaded);
-        console.log("deliveryAddress:", deliveryAddress);
-        console.log("window.Razorpay:", typeof window.Razorpay);
-
         if (!isRazorpayScriptLoaded) {
             showNotification(t('paymentGatewayNotLoaded'), 'error');
             return;
         }
         if (typeof window.Razorpay === 'undefined') {
             showNotification(t('paymentGatewayNotReady'), 'error');
-            console.error("window.Razorpay is undefined. Script might not have initialized correctly.");
             return;
         }
         if (!deliveryAddress || !deliveryAddress._id) {
@@ -186,18 +183,12 @@ const CheckoutPage = () => {
         }
 
         setIsSubmitting(true);
-
-        let orderData = null;
-
         try {
-            console.log("Attempting to create Razorpay order on backend...");
-            orderData = await createRazorpayOrder(deliveryAddress._id, total);
-            console.log("Razorpay order data received (or was null/undefined):", orderData);
+            const orderData = await createRazorpayOrder(deliveryAddress._id, total);
 
             if (!orderData || !orderData.order_id || !orderData.amount || !orderData.key_id) {
                 const errorMessage = t('failedToCreateRazorpayOrder') + ": Missing essential order data from backend.";
                 showNotification(errorMessage, 'error');
-                console.error(errorMessage, orderData);
                 setIsSubmitting(false);
                 return;
             }
@@ -216,9 +207,7 @@ const CheckoutPage = () => {
                             razorpay_order_id: response.razorpay_order_id,
                             razorpay_signature: response.razorpay_signature,
                         };
-                        console.log("Verifying Razorpay payment with data:", verificationData);
                         const result = await verifyRazorpayPayment(verificationData);
-                        console.log("Payment verification result:", result);
                         if (result.status === 'success') {
                             showNotification(t('paymentSuccessful'), 'success');
                             setCart([]);
@@ -228,7 +217,6 @@ const CheckoutPage = () => {
                         }
                     } catch (error) {
                         showNotification(error.message || t('paymentVerificationFailed'), 'error');
-                        console.error("Payment verification failed:", error);
                     }
                 },
                 prefill: {
@@ -245,24 +233,19 @@ const CheckoutPage = () => {
                 modal: {
                     ondismiss: function() {
                         showNotification(t('paymentCancelled'), 'info');
-                        console.log("Razorpay modal dismissed by user.");
                     }
                 }
             };
 
-            console.log("Initializing Razorpay with options:", options);
             const rzp = new window.Razorpay(options);
             rzp.open();
-            console.log("Razorpay popup should now be open.");
 
             rzp.on('payment.failed', function (response){
                 showNotification(`${t('paymentFailed')}: ${response.error.description || t('unknownError')}`, 'error');
-                console.error("Razorpay payment failed:", response.error);
             });
 
         } catch (error) {
             showNotification(error.message || t('paymentInitiationFailed'), 'error');
-            console.error("Error during payment initiation or order creation:", error);
         } finally {
             setIsSubmitting(false);
         }
