@@ -16,8 +16,9 @@ const CartPage = () => {
     return sum + (item.originalPrice || item.price) * item.quantity;
   }, 0);
 
-  const shipping = subtotal > 500 ? 0.00 : 40.00; // Example: Free shipping over ₹500
-  const total = subtotal + shipping;
+  // --- FIX: Delivery charges removed ---
+  const shipping = 0; // Shipping is now always free
+  const total = subtotal; // Total is now just the subtotal
 
   // Calculate total discount by subtracting the subtotal from the total original price
   const totalDiscount = totalOriginalPrice - subtotal;
@@ -153,12 +154,7 @@ const CartPage = () => {
                 <span>{t('discount')}</span> {/* New line for total discount */}
                 <span className="text-green-600 font-semibold">- ₹{totalDiscount.toFixed(2)}</span>
               </div>
-              <div className="flex justify-between">
-                <span>{t('Delivery Charges')}</span>
-                <span className={shipping === 0 ? "text-green-600 font-semibold" : ""}>
-                  {shipping === 0 ? t('free') : `₹${shipping.toFixed(2)}`}
-                </span>
-              </div>
+              {/* --- FIX: Delivery Charges section removed --- */}
             </div>
             <div className="flex justify-between font-bold text-xl text-gray-900 border-t border-dashed pt-4">
               <span>{t('Total Amount')}</span>
